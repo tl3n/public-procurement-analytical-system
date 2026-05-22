@@ -1,0 +1,44 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "procurement-monitoring-backend"
+version = "0.1.0"
+description = "Аналітична система моніторингу державних закупівель — backend"
+requires-python = ">=3.12"
+dependencies = [
+    # Web framework / server
+    "fastapi==0.115.6",
+    "uvicorn[standard]==0.34.0",
+    # Database
+    "sqlalchemy==2.0.36",
+    "asyncpg==0.30.0",
+    "alembic==1.14.0",
+    # HTTP client for the Prozorro collector
+    "httpx[http2]==0.28.1",
+    # Scheduler — v3.x (AsyncIOScheduler); v4 is an incompatible rewrite
+    "apscheduler==3.11.0",
+    # Analytics
+    "pandas==2.2.3",
+    "numpy==2.2.1",
+    "statsmodels==0.14.4",
+    # Validation / configuration
+    "pydantic==2.10.4",
+    "pydantic-settings==2.7.1",
+    # Caching
+    "redis==5.2.1",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest==8.3.4",
+    "pytest-asyncio==0.25.0",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["app"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
