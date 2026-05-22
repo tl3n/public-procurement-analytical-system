@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import datetime
 
-from sqlalchemy import DateTime, String, Text
+from sqlalchemy import DateTime, Index, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import Base, TimestampMixin
@@ -20,6 +20,10 @@ class Document(Base, TimestampMixin):
     """Документ — a file attachment linked polymorphically to a parent entity."""
 
     __tablename__ = "documents"
+    # Index supporting the polymorphic parent lookup.
+    __table_args__ = (
+        Index("ix_documents_related", "related_entity_type", "related_entity_id"),
+    )
 
     id: Mapped[str] = mapped_column(String(32), primary_key=True)
     # Polymorphic link: type in {tender, lot, bid, complaint}, id of that entity.

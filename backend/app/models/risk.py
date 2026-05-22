@@ -3,7 +3,7 @@
 A risk indicator value is a derived entity produced by the analytics module.
 It is system-generated, hence a UUID primary key, and is
 deleted together with its parent tender on re-load — its foreign key therefore uses
-ON DELETE CASCADE (design.md §2.4.2).
+ON DELETE CASCADE.
 """
 
 from __future__ import annotations
@@ -13,7 +13,7 @@ import decimal
 import uuid
 from typing import TYPE_CHECKING
 
-from sqlalchemy import DateTime, ForeignKey, Numeric, String, Uuid
+from sqlalchemy import DateTime, ForeignKey, Index, Numeric, String, Uuid
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, TimestampMixin
@@ -26,6 +26,9 @@ class RiskIndicatorValue(Base, TimestampMixin):
     """Значення індикатора ризику — a computed indicator result for one tender."""
 
     __tablename__ = "risk_indicator_values"
+    __table_args__ = (
+        Index("ix_risk_indicator_values_tender_id", "tender_id"),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
     tender_id: Mapped[str] = mapped_column(

@@ -12,7 +12,7 @@ import decimal
 import uuid
 from typing import TYPE_CHECKING
 
-from sqlalchemy import DateTime, ForeignKey, Numeric, String, Text
+from sqlalchemy import DateTime, ForeignKey, Index, Numeric, String, Text, text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -30,6 +30,26 @@ class Tender(Base, TimestampMixin):
     """Тендерна процедура — the central entity of the model."""
 
     __tablename__ = "tenders"
+    __table_args__ = (
+        Index("ix_tenders_procuring_entity_id", "procuring_entity_id"),
+        Index("ix_tenders_date_published", "date_published"),
+        Index("ix_tenders_value_amount", "value_amount"),
+        # Multi-column dashboard filter; columns ordered by decreasing selectivity.
+        Index(
+            "ix_tenders_buyer_status_published",
+            "procuring_entity_id",
+            "status",
+            "date_published",
+        ),
+        # Compact partial index serving the common "active tenders" query.
+        Index(
+            "ix_tenders_active",
+            "date_published",
+            postgresql_where=text("status LIKE 'active%'"),
+        ),
+        # GIN index — safety net for ad-hoc queries into the raw JSONB document.
+        Index("ix_tenders_raw_data", "raw_data", postgresql_using="gin"),
+    )
 
     id: Mapped[str] = mapped_column(String(32), primary_key=True)
     # Human-readable identifier, format UA-YYYY-MM-DD-NNNNNN.
@@ -79,6 +99,7 @@ class Lot(Base, TimestampMixin):
     """Лот — a unit within a tender against which winners are determined."""
 
     __tablename__ = "lots"
+    __table_args__ = (Index("ix_lots_tender_id", "tender_id"),)
 
     id: Mapped[str] = mapped_column(String(32), primary_key=True)
     tender_id: Mapped[str] = mapped_column(
@@ -106,6 +127,7 @@ class Item(Base, TimestampMixin):
     """Предмет закупівлі — a good, work or service procured within a lot."""
 
     __tablename__ = "items"
+    __table_args__ = (Index("ix_items_lot_id", "lot_id"),)
 
     id: Mapped[str] = mapped_column(String(32), primary_key=True)
     lot_id: Mapped[str] = mapped_column(ForeignKey("lots.id", ondelete="RESTRICT"))
@@ -122,6 +144,12 @@ class Bid(Base, TimestampMixin):
     """Пропозиція — a supplier's offer on a lot."""
 
     __tablename__ = "bids"
+    __table_args__ = (
+        Index("ix_bids_lot_id", "lot_id"),
+        Index("ix_bids_supplier_id", "supplier_id"),
+        # Bids of a given supplier over time.
+        Index("ix_bids_supplier_date", "supplier_id", "date"),
+    )
 
     id: Mapped[str] = mapped_column(String(32), primary_key=True)
     lot_id: Mapped[str] = mapped_column(ForeignKey("lots.id", ondelete="RESTRICT"))
@@ -141,6 +169,11 @@ class Award(Base, TimestampMixin):
     """Присудження — the result of evaluating bids on a lot."""
 
     __tablename__ = "awards"
+    __table_args__ = (
+        Index("ix_awards_lot_id", "lot_id"),
+        Index("ix_awards_bid_id", "bid_id"),
+        Index("ix_awards_supplier_id", "supplier_id"),
+    )
 
     id: Mapped[str] = mapped_column(String(32), primary_key=True)
     lot_id: Mapped[str] = mapped_column(ForeignKey("lots.id", ondelete="RESTRICT"))
@@ -165,6 +198,8 @@ class Contract(Base, TimestampMixin):
     """Договір — a contract concluded on the basis of a successful award (1:1)."""
 
     __tablename__ = "contracts"
+    # award_id is already indexed by its UNIQUE constraint.
+    __table_args__ = (Index("ix_contracts_supplier_id", "supplier_id"),)
 
     id: Mapped[str] = mapped_column(String(32), primary_key=True)
     award_id: Mapped[str] = mapped_column(
@@ -192,6 +227,7 @@ class Complaint(Base, TimestampMixin):
     """Скарга — an appeal against the buyer's actions on a procedure."""
 
     __tablename__ = "complaints"
+    __table_args__ = (Index("ix_complaints_tender_id", "tender_id"),)
 
     id: Mapped[str] = mapped_column(String(32), primary_key=True)
     tender_id: Mapped[str] = mapped_column(

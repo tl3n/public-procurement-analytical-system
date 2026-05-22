@@ -13,7 +13,7 @@ class Base(DeclarativeBase):
 
 
 class TimestampMixin:
-    """created_at / updated_at service columns (design.md §2.3.3)."""
+    """created_at / updated_at service columns."""
 
     created_at: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
