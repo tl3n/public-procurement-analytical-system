@@ -50,8 +50,8 @@ services:
 
   scheduler:
     build: ./backend
-    # Placeholder
-    command: sh -c "echo 'scheduler placeholder'; sleep infinity"
+    # Apply schema migrations first, then start the periodic sync loop.
+    command: sh -c "alembic upgrade head && python -m app.scheduler.main"
     environment:
       DATABASE_URL: ${DATABASE_URL}
       REDIS_URL: ${REDIS_URL}
