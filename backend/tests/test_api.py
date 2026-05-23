@@ -275,6 +275,9 @@ async def test_dashboard_returns_kpis_and_distribution(client, seeded):
     by_label = {b["label"]: b["tender_count"] for b in buckets}
     assert by_label["aboveThresholdUA"] == 3
     assert by_label["negotiation"] == 1
+    # Monthly volume series — 4 tenders fall into 3 months (Jan/Feb/Mar 2025).
+    months = {p["period"][:7] for p in body["volume_over_time"]}
+    assert months == {"2025-01", "2025-02", "2025-03"}
 
 
 # --- Statistics ------------------------------------------------------------

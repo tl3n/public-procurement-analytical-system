@@ -94,6 +94,12 @@ export interface DistributionBucketOut {
   total_value: string | null;
 }
 
+export interface TimeSeriesPoint {
+  period: string; // ISO datetime, e.g. "2025-01-01T00:00:00+00:00"
+  tender_count: number;
+  total_value: string | null;
+}
+
 export interface BuyerRankOut {
   edrpou: string | null;
   name: string | null;
@@ -123,6 +129,7 @@ export interface DashboardKpis {
 export interface DashboardResponse {
   kpis: DashboardKpis;
   procurement_type_distribution: DistributionBucketOut[];
+  volume_over_time: TimeSeriesPoint[];
   top_risk_tenders: TenderSummary[];
   high_risk_share: HighRiskShareOut;
 }

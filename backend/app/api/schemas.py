@@ -108,6 +108,12 @@ class DistributionBucketOut(_Out):
     total_value: Decimal | None = None
 
 
+class TimeSeriesPointOut(_Out):
+    period: datetime
+    tender_count: int
+    total_value: Decimal | None = None
+
+
 class BuyerRankOut(_Out):
     edrpou: str | None = None
     name: str | None = None
@@ -137,6 +143,7 @@ class DashboardKpis(BaseModel):
 class DashboardResponse(BaseModel):
     kpis: DashboardKpis
     procurement_type_distribution: list[DistributionBucketOut]
+    volume_over_time: list[TimeSeriesPointOut]
     top_risk_tenders: list[TenderSummary]
     high_risk_share: HighRiskShareOut
 

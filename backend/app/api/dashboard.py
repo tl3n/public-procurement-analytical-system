@@ -12,6 +12,7 @@ from app.api.schemas import (
     DashboardResponse,
     DistributionBucketOut,
     HighRiskShareOut,
+    TimeSeriesPointOut,
 )
 from app.cache import Cache, get_cache
 from app.db import get_session
@@ -19,7 +20,8 @@ from app.models import RiskIndicatorValue, Tender
 
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
 
-_CACHE_KEY = "dashboard:v1"
+# v2: added monthly volume_over_time series for the dashboard chart.
+_CACHE_KEY = "dashboard:v2"
 
 
 @router.get("", response_model=DashboardResponse)
@@ -60,6 +62,18 @@ async def get_dashboard(
         for b in type_buckets
     ]
 
+    volume_points = await aggregations.procurement_volume_over_time(
+        session, granularity="month"
+    )
+    volume_over_time = [
+        TimeSeriesPointOut(
+            period=p.period,
+            tender_count=p.tender_count,
+            total_value=p.total_value,
+        )
+        for p in volume_points
+    ]
+
     high_risk = await aggregations.high_risk_share(session)
     high_risk_share = HighRiskShareOut(
         total_tenders=high_risk.total_tenders,
@@ -88,6 +102,7 @@ async def get_dashboard(
     response = DashboardResponse(
         kpis=kpis,
         procurement_type_distribution=type_distribution,
+        volume_over_time=volume_over_time,
         top_risk_tenders=top_risk,
         high_risk_share=high_risk_share,
     )
