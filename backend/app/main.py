@@ -4,6 +4,7 @@ from fastapi import Depends, FastAPI, Response
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api import admin, dashboard, exports, statistics, tenders
 from app.db import get_session
 
 app = FastAPI(title="Аналітична система моніторингу державних закупівель")
@@ -21,3 +22,10 @@ async def health(
     except Exception:
         response.status_code = 503
         return {"status": "degraded", "database": "error"}
+
+
+app.include_router(tenders.router)
+app.include_router(dashboard.router)
+app.include_router(statistics.router)
+app.include_router(exports.router)
+app.include_router(admin.router)
