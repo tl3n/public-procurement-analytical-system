@@ -1,9 +1,15 @@
-# Placeholder image until commit 15 (React + TypeScript scaffold).
-# The real multi-stage build (Vite dev server / static bundle) is added there.
 FROM node:22-slim
 
 WORKDIR /app
 
+# Install dependencies first so the layer is cached across source changes.
+COPY package.json ./
+RUN npm install
+
+# Copy source.
+COPY . .
+
 EXPOSE 5173
 
-CMD ["sh", "-c", "echo 'frontend placeholder — implemented in commit 15'; sleep infinity"]
+# Vite dev server. ``--host 0.0.0.0`` is required for Docker port forwarding.
+CMD ["npm", "run", "dev", "--", "--host", "0.0.0.0"]
