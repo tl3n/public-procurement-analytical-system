@@ -5,7 +5,7 @@ WORKDIR /app
 # Install dependencies first so the layer is cached across code changes.
 COPY pyproject.toml ./
 COPY app ./app
-RUN pip install --no-cache-dir .
+RUN pip install --no-cache-dir ".[dev]"
 
 # Migration tooling — copied after install so it does not bust the dependency layer.
 COPY alembic.ini ./
