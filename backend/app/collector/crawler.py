@@ -12,6 +12,7 @@ The yielded records are the summary objects returned by the feed (``id`` and
 is the responsibility of the normalizer module (commit 7).
 """
 
+import logging
 from collections.abc import AsyncIterator
 from datetime import UTC, datetime
 
@@ -19,8 +20,11 @@ import httpx
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.collector.http_client import http_get_with_retry
+from app.collector.normalizer import persist_tender
 from app.config import settings
 from app.models.sync import SyncState
+
+log = logging.getLogger(__name__)
 
 
 async def _get_or_create_sync_state(
@@ -91,3 +95,52 @@ async def crawl(
         if not next_offset:
             break
         offset = next_offset
+
+
+async def run_sync(
+    client: httpx.AsyncClient,
+    session: AsyncSession,
+    *,
+    feed_name: str = "tenders",
+    base_url: str | None = None,
+    initial_offset: str | None = None,
+    max_records: int | None = None,
+) -> dict[str, int]:
+    """Walk the feed, fetch each tender's detail, and persist it.
+
+    Errors on a single record are logged and skipped so that one bad record
+    cannot stop the whole sync. The pagination offset is still advanced
+    (skipped records are not retried automatically — the next emission of the
+    same id during a subsequent ``dateModified`` change will pick them up).
+
+    Returns a small summary dict for the caller (the scheduler) to log.
+    """
+    resolved_base = (base_url or settings.prozorro_api_url).rstrip("/")
+    detail_base = f"{resolved_base}/{feed_name}"
+
+    processed = 0
+    failed = 0
+    async for summary in crawl(
+        client,
+        session,
+        feed_name=feed_name,
+        base_url=base_url,
+        initial_offset=initial_offset,
+        max_records=max_records,
+    ):
+        tender_id = summary["id"]
+        try:
+            response = await http_get_with_retry(
+                client, f"{detail_base}/{tender_id}"
+            )
+            data = response.json().get("data") or {}
+            await persist_tender(session, data)
+            await session.commit()
+            processed += 1
+        except Exception as exc:
+            # One bad record must not abort the whole sync.
+            await session.rollback()
+            failed += 1
+            log.warning("skipping tender %s: %s", tender_id, exc)
+
+    return {"processed": processed, "failed": failed}
