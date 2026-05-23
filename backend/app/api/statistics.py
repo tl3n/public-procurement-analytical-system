@@ -15,10 +15,19 @@ from app.api.schemas import (
     RankingsResponse,
     SupplierRankOut,
 )
+from app.cache import Cache, get_cache
 from app.db import get_session
 from app.models import RiskIndicatorValue
 
 router = APIRouter(prefix="/statistics", tags=["statistics"])
+
+
+def _rankings_cache_key(limit: int, since: datetime | None, until: datetime | None) -> str:
+    return (
+        f"rankings:v1:limit={limit}"
+        f":since={since.isoformat() if since else ''}"
+        f":until={until.isoformat() if until else ''}"
+    )
 
 
 @router.get("/rankings", response_model=RankingsResponse)
@@ -27,15 +36,20 @@ async def get_rankings(
     since: datetime | None = None,
     until: datetime | None = None,
     session: AsyncSession = Depends(get_session),
-) -> RankingsResponse:
-    """Top buyers (by total tender value) and top suppliers (by contract value)."""
+    cache: Cache = Depends(get_cache),
+):
+    key = _rankings_cache_key(limit, since, until)
+    cached = await cache.get_json(key)
+    if cached is not None:
+        return cached
+
     buyer_rows = await aggregations.top_buyers(
         session, limit=limit, by="value", since=since, until=until
     )
     supplier_rows = await aggregations.top_suppliers(
         session, limit=limit, since=since, until=until
     )
-    return RankingsResponse(
+    response = RankingsResponse(
         buyers=[
             BuyerRankOut(
                 edrpou=r.edrpou,
@@ -55,13 +69,21 @@ async def get_rankings(
             for r in supplier_rows
         ],
     )
+    await cache.set_json(key, response.model_dump(mode="json"))
+    return response
 
 
 @router.get("/indicators", response_model=IndicatorReportResponse)
 async def get_indicator_report(
     session: AsyncSession = Depends(get_session),
-) -> IndicatorReportResponse:
+    cache: Cache = Depends(get_cache),
+):
     """Per-indicator counts of True / False / NULL outcomes."""
+    key = "indicators:v1"
+    cached = await cache.get_json(key)
+    if cached is not None:
+        return cached
+
     # Aggregate per indicator code: total rows, True count, False count, NULL
     # count, average numeric.
     is_true = case((RiskIndicatorValue.value_boolean.is_(True), 1))
@@ -108,4 +130,6 @@ async def get_indicator_report(
                 ),
             )
         )
-    return IndicatorReportResponse(indicators=indicators)
+    response = IndicatorReportResponse(indicators=indicators)
+    await cache.set_json(key, response.model_dump(mode="json"))
+    return response

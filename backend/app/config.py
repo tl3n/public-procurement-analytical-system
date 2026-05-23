@@ -19,6 +19,9 @@ class Settings(BaseSettings):
     # Feed offset seed for the first run: Unix timestamp (default = 2025-01-01).
     initial_load_start_timestamp: int = 1735689600
 
+    # Cache
+    cache_ttl_seconds: int = 300
+
     # Infrastructure — required, no defaults.
     database_url: str
     redis_url: str

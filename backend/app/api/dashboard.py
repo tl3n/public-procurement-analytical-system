@@ -13,16 +13,24 @@ from app.api.schemas import (
     DistributionBucketOut,
     HighRiskShareOut,
 )
+from app.cache import Cache, get_cache
 from app.db import get_session
 from app.models import RiskIndicatorValue, Tender
 
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
 
+_CACHE_KEY = "dashboard:v1"
+
 
 @router.get("", response_model=DashboardResponse)
 async def get_dashboard(
     session: AsyncSession = Depends(get_session),
-) -> DashboardResponse:
+    cache: Cache = Depends(get_cache),
+):
+    cached = await cache.get_json(_CACHE_KEY)
+    if cached is not None:
+        return cached
+
     total_tenders = (
         await session.execute(select(func.count()).select_from(Tender))
     ).scalar_one()
@@ -77,9 +85,11 @@ async def get_dashboard(
     rows = (await session.execute(stmt)).all()
     top_risk = [tender_to_summary(row[0]) for row in rows]
 
-    return DashboardResponse(
+    response = DashboardResponse(
         kpis=kpis,
         procurement_type_distribution=type_distribution,
         top_risk_tenders=top_risk,
         high_risk_share=high_risk_share,
     )
+    await cache.set_json(_CACHE_KEY, response.model_dump(mode="json"))
+    return response
