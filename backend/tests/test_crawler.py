@@ -117,3 +117,31 @@ async def test_max_records_cap_stops_walk(session):
     # After the first page yields 2 records the cap is reached — no further fetch.
     assert [r["id"] for r in records] == ["t1", "t2"]
     assert calls == ["p0"]
+
+
+async def test_cap_smaller_than_page_size_is_exact(session):
+    """The cap must stop yielding mid-page, not after consuming a full page."""
+    calls: list[str] = []
+    async with httpx.AsyncClient(
+        transport=httpx.MockTransport(_make_handler(calls))
+    ) as client:
+        records = [
+            r
+            async for r in crawler.crawl(
+                client,
+                session,
+                base_url="https://example.test/api",
+                initial_offset="p0",
+                max_records=1,
+            )
+        ]
+
+    # Exactly one record yielded — not the whole first page.
+    assert [r["id"] for r in records] == ["t1"]
+    assert calls == ["p0"]
+
+    # The offset was not advanced past the page we partially consumed, so a
+    # follow-up run would reprocess it (safe under idempotent persistence).
+    state = await session.get(SyncState, "tenders")
+    assert state is not None
+    assert state.last_offset == "p0"

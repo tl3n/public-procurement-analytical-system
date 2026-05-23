@@ -68,12 +68,21 @@ async def crawl(
             # "caught up"; the next scheduled run will resume from `offset`).
             break
 
+        hit_cap = False
         for record in data:
             yield record
             yielded += 1
+            # A zero cap means "unlimited"; otherwise stop as soon as it is reached.
+            if max_records and yielded >= max_records:
+                hit_cap = True
+                break
+
+        if hit_cap:
+            # Stop without advancing the stored offset: the next run reprocesses
+            # this page, which is harmless because the normalizer is idempotent.
+            break
 
         next_offset = (payload.get("next_page") or {}).get("offset")
-        # Persist offset only after every record on this page has been yielded.
         if next_offset:
             state.last_offset = next_offset
         state.last_synced_at = datetime.now(tz=UTC)
@@ -82,7 +91,3 @@ async def crawl(
         if not next_offset:
             break
         offset = next_offset
-
-        # A zero cap means "unlimited" — used in production for the periodic sync.
-        if max_records and yielded >= max_records:
-            break
