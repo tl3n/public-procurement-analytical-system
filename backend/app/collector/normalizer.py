@@ -20,6 +20,8 @@ Two correctness properties matter:
 
 import hashlib
 import logging
+from collections.abc import Iterable
+from typing import TypeVar
 
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -39,6 +41,21 @@ from app.models import (
 )
 
 log = logging.getLogger(__name__)
+
+_T = TypeVar("_T")
+
+
+def _dedupe_by_id(items: Iterable[_T]) -> list[_T]:
+    """Drop earlier occurrences of any repeated ``.id``, keeping the last.
+
+    Real-world Prozorro records occasionally list the same child id twice — most
+    commonly a re-uploaded document under the original id. The latest entry is
+    treated as the authoritative version.
+    """
+    seen: dict[str, _T] = {}
+    for it in items:
+        seen[it.id] = it  # type: ignore[attr-defined]
+    return list(seen.values())
 
 
 def _format_address(addr: AddressIn | None) -> str | None:
@@ -153,6 +170,17 @@ async def _delete_existing_children(session: AsyncSession, tender_id: str) -> No
 async def persist_tender(session: AsyncSession, raw: dict) -> Tender:
     """Validate ``raw`` and persist the tender plus all children."""
     t = TenderIn.model_validate(raw)
+
+    # Deduplicate every child collection up front. Source data occasionally
+    # repeats an id (see real-world tender f35290c00cef4039aa6c12f871890772,
+    # which lists two revisions of the same document under one id).
+    t.lots = _dedupe_by_id(t.lots)
+    t.items = _dedupe_by_id(t.items)
+    t.bids = _dedupe_by_id(t.bids)
+    t.awards = _dedupe_by_id(t.awards)
+    t.contracts = _dedupe_by_id(t.contracts)
+    t.complaints = _dedupe_by_id(t.complaints)
+    t.documents = _dedupe_by_id(t.documents)
 
     procuring_entity = await _find_or_create_procuring_entity(
         session, t.procuringEntity

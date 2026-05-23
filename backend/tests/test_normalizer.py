@@ -91,6 +91,27 @@ async def test_persist_is_idempotent(session, tender_data):
     assert await _count(session, Supplier) == 2
 
 
+async def test_persist_dedupes_repeated_child_ids(session, tender_data):
+    """Source data sometimes repeats an id (a re-uploaded document under the
+    same id). The normalizer must keep only the last occurrence rather than
+    raising on a PK collision."""
+    # Mirror the real-world failure seen during the first live scheduler run.
+    revised = dict(tender_data["documents"][0])
+    revised["title"] = "duplicate-revision"
+    payload = dict(tender_data)
+    payload["documents"] = list(tender_data["documents"]) + [revised]
+
+    await persist_tender(session, payload)
+    await session.commit()
+
+    # No PK violation; row count matches unique ids (i.e. original 10).
+    assert await _count(session, Document) == len(tender_data["documents"])
+    # The last occurrence is the one persisted.
+    doc_row = await session.get(Document, revised["id"])
+    assert doc_row is not None
+    assert doc_row.title == "duplicate-revision"
+
+
 async def test_run_sync_integrates_crawler_and_normalizer(session, tender_data):
     """End-to-end: feed yields one summary, detail endpoint returns the fixture."""
     tender_id = tender_data["id"]
