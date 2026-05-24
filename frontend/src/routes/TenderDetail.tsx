@@ -1,7 +1,9 @@
-import { useParams } from "@tanstack/react-router";
+import { Link, useParams } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
+import { ArrowLeft } from "lucide-react";
 
 import { api } from "@/api/client";
+import { PageHeader } from "@/components/layout/PageHeader";
 import { ContractsSection } from "@/components/tenders/ContractsSection";
 import { LotsSection } from "@/components/tenders/LotsSection";
 import { RiskIndicatorsSection } from "@/components/tenders/RiskIndicatorsSection";
@@ -15,34 +17,47 @@ export function TenderDetail() {
     queryFn: () => api.getTender(id),
   });
 
-  if (isPending) {
-    return (
-      <div className="flex flex-col gap-4">
-        <Card className="h-40 animate-pulse bg-muted" />
-        <Card className="h-72 animate-pulse bg-muted" />
-      </div>
-    );
-  }
-  if (isError) {
-    return (
-      <Card>
-        <CardContent className="py-8 text-center">
-          <p className="text-sm font-medium">
-            Не вдалось завантажити тендер.
-          </p>
-          <p className="mt-1 text-xs text-muted-foreground">
-            {(error as Error).message}
-          </p>
-        </CardContent>
-      </Card>
-    );
-  }
   return (
     <div className="flex flex-col gap-6">
-      <TenderHeader tender={data} />
-      <LotsSection lots={data.lots} />
-      <ContractsSection contracts={data.contracts} />
-      <RiskIndicatorsSection values={data.risk_indicator_values} />
+      <PageHeader
+        title="Деталі тендера"
+        description={data?.tender_id_human ?? id}
+        actions={
+          <Link
+            to="/tenders"
+            className="inline-flex items-center gap-1.5 rounded-md border bg-card px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+          >
+            <ArrowLeft className="h-3.5 w-3.5" />
+            До переліку
+          </Link>
+        }
+      />
+
+      {isPending ? (
+        <div className="flex flex-col gap-4">
+          <Card className="h-40 animate-pulse bg-muted" />
+          <Card className="h-72 animate-pulse bg-muted" />
+          <Card className="h-40 animate-pulse bg-muted" />
+        </div>
+      ) : isError ? (
+        <Card>
+          <CardContent className="py-8 text-center">
+            <p className="text-sm font-medium">
+              Не вдалось завантажити тендер.
+            </p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              {(error as Error).message}
+            </p>
+          </CardContent>
+        </Card>
+      ) : (
+        <>
+          <TenderHeader tender={data} />
+          <LotsSection lots={data.lots} />
+          <ContractsSection contracts={data.contracts} />
+          <RiskIndicatorsSection values={data.risk_indicator_values} />
+        </>
+      )}
     </div>
   );
 }

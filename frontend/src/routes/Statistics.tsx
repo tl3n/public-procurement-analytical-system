@@ -3,6 +3,7 @@ import { useState } from "react";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 
 import { api } from "@/api/client";
+import { PageHeader } from "@/components/layout/PageHeader";
 import { DistributionsBlock } from "@/components/statistics/DistributionsBlock";
 import { ExportButtons } from "@/components/statistics/ExportButtons";
 import { IndicatorReportBlock } from "@/components/statistics/IndicatorReportBlock";
@@ -33,6 +34,10 @@ export function Statistics() {
 
   return (
     <div className="flex flex-col gap-6">
+      <PageHeader
+        title="Статистика"
+        description="Рейтинги замовників і постачальників, розподіли за категоріями та звіт по індикаторах ризику."
+      />
       <TimeRangeControls value={range} onChange={setRange} />
 
       <Section title="Рейтинги" query={rankings}>

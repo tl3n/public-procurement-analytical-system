@@ -4,25 +4,57 @@
 
 @layer base {
   :root {
-    --background: 0 0% 100%;
-    --foreground: 240 10% 3.9%;
+    /* Surfaces — warmer neutral than pure white to soften the page. */
+    --background: 220 20% 98%;
+    --foreground: 222 47% 11%;
     --card: 0 0% 100%;
-    --card-foreground: 240 10% 3.9%;
-    --primary: 240 5.9% 10%;
-    --primary-foreground: 0 0% 98%;
-    --secondary: 240 4.8% 95.9%;
-    --secondary-foreground: 240 5.9% 10%;
-    --muted: 240 4.8% 95.9%;
-    --muted-foreground: 240 3.8% 46.1%;
-    --accent: 240 4.8% 95.9%;
-    --accent-foreground: 240 5.9% 10%;
-    --border: 240 5.9% 90%;
-    --input: 240 5.9% 90%;
-    --ring: 240 5.9% 10%;
-    --radius: 0.5rem;
+    --card-foreground: 222 47% 11%;
+
+    /* Brand — clear blue (Tailwind blue-600). Used for active nav, charts,
+     * primary CTAs. Foreground is white for contrast. */
+    --primary: 217 91% 50%;
+    --primary-foreground: 0 0% 100%;
+
+    /* Neutral secondary. */
+    --secondary: 220 14% 94%;
+    --secondary-foreground: 222 47% 11%;
+
+    /* Muted = the section dividers / placeholder gray. */
+    --muted: 220 14% 96%;
+    --muted-foreground: 220 9% 46%;
+
+    /* Accent — used for hover states on rows / nav links. */
+    --accent: 220 14% 94%;
+    --accent-foreground: 222 47% 11%;
+
+    /* Lines + form-control borders. */
+    --border: 220 13% 91%;
+    --input: 220 13% 91%;
+    --ring: 217 91% 50%;
+
+    /* Semantic accents available as utility tokens. */
+    --success: 142 71% 36%;
+    --warning: 38 92% 50%;
+    --danger: 0 84% 60%;
+
+    --radius: 0.75rem;
   }
 
   body {
-    @apply bg-background text-foreground;
+    @apply bg-background text-foreground antialiased;
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  }
+
+  /* Subtle scrollbar styling on long lists. */
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: hsl(var(--border));
+    border-radius: 999px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: hsl(var(--muted-foreground) / 0.4);
   }
 }

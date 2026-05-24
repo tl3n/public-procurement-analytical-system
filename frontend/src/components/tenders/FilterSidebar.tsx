@@ -1,9 +1,12 @@
+import { SlidersHorizontal } from "lucide-react";
+
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { INDICATOR_METADATA } from "@/lib/indicators";
+import { labelForStatus, labelForType } from "@/lib/labels";
 
 export interface Filters {
   cpv?: string;
@@ -71,9 +74,12 @@ export function FilterSidebar({ values, onApply, onReset }: Props) {
   }
 
   return (
-    <Card>
+    <Card className="lg:sticky lg:top-20 lg:max-h-[calc(100vh-6rem)] lg:overflow-y-auto">
       <CardHeader className="pb-3">
-        <CardTitle className="text-sm">Фільтри</CardTitle>
+        <CardTitle className="flex items-center gap-2 text-sm">
+          <SlidersHorizontal className="h-4 w-4 text-muted-foreground" />
+          Фільтри
+        </CardTitle>
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
         <Field label="CPV код">
@@ -100,7 +106,7 @@ export function FilterSidebar({ values, onApply, onReset }: Props) {
             <option value="">— будь-який —</option>
             {PROCEDURE_TYPES.map((t) => (
               <option key={t} value={t}>
-                {t}
+                {labelForType(t)}
               </option>
             ))}
           </Select>
@@ -113,7 +119,7 @@ export function FilterSidebar({ values, onApply, onReset }: Props) {
             <option value="">— будь-який —</option>
             {STATUSES.map((s) => (
               <option key={s} value={s}>
-                {s}
+                {labelForStatus(s)}
               </option>
             ))}
           </Select>

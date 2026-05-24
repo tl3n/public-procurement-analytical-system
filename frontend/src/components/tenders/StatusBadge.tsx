@@ -1,4 +1,5 @@
 import { Badge } from "@/components/ui/badge";
+import { labelForStatus } from "@/lib/labels";
 
 const STATUS_VARIANT: Record<
   string,
@@ -18,5 +19,5 @@ const STATUS_VARIANT: Record<
 export function StatusBadge({ status }: { status: string | null }) {
   if (!status) return <Badge variant="secondary">—</Badge>;
   const variant = STATUS_VARIANT[status] ?? "secondary";
-  return <Badge variant={variant}>{status}</Badge>;
+  return <Badge variant={variant}>{labelForStatus(status)}</Badge>;
 }
