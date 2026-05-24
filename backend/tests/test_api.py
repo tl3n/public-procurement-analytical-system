@@ -1,34 +1,17 @@
-"""Tests for the FastAPI REST API."""
+"""Tests for the FastAPI REST API.
+
+The ``seeded`` dataset is built by the shared fixture in ``conftest.py``.
+"""
 
 import csv
-import hashlib
 import io
 import json as jsonlib
-from datetime import datetime, timezone
-from decimal import Decimal
 
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 
 from app.db import get_session
 from app.main import app
-from app.models import (
-    Award,
-    Bid,
-    Contract,
-    Item,
-    Lot,
-    ProcuringEntity,
-    RiskIndicatorValue,
-    Supplier,
-    Tender,
-)
-
-UTC = timezone.utc
-
-
-def _id(*parts: str) -> str:
-    return hashlib.sha256("/".join(parts).encode()).hexdigest()[:32]
 
 
 # --- Fixtures --------------------------------------------------------------
@@ -44,122 +27,6 @@ async def client(session):
     async with AsyncClient(transport=transport, base_url="http://test") as c:
         yield c
     app.dependency_overrides.clear()
-
-
-@pytest_asyncio.fixture
-async def seeded(session) -> dict:
-    """A small heterogeneous dataset shared by most API tests."""
-    kyiv = ProcuringEntity(edrpou="buy-kyiv", name="Buyer Kyiv", region="Київ")
-    lviv = ProcuringEntity(
-        edrpou="buy-lviv", name="Buyer Lviv", region="Львівська область"
-    )
-    session.add_all([kyiv, lviv])
-    sup_a = Supplier(edrpou="sup-a", name="Supplier A")
-    sup_b = Supplier(edrpou="sup-b", name="Supplier B")
-    session.add_all([sup_a, sup_b])
-    await session.flush()
-
-    tenders: dict[str, Tender] = {}
-
-    def make_tender(key, buyer, *, type_, status, value, dp, cpv=None):
-        tid = _id("api-test", key)
-        t = Tender(
-            id=tid,
-            procuring_entity_id=buyer.id,
-            procurement_method="open",
-            procurement_method_type=type_,
-            status=status,
-            value_amount=value,
-            value_currency="UAH",
-            date_published=dp,
-            title=f"Tender {key}",
-        )
-        session.add(t)
-        session.add(
-            Lot(id=tid, tender_id=tid, value_amount=value, value_currency="UAH")
-        )
-        tenders[key] = t
-        if cpv:
-            session.add(Item(id=_id("item", tid), lot_id=tid, cpv_code=cpv))
-        return t
-
-    # 3 Kyiv tenders + 1 Lviv tender, varied types and dates.
-    make_tender(
-        "k1", kyiv,
-        type_="aboveThresholdUA", status="complete",
-        value=Decimal("100"), dp=datetime(2025, 1, 10, tzinfo=UTC),
-        cpv="79950000-8",
-    )
-    make_tender(
-        "k2", kyiv,
-        type_="aboveThresholdUA", status="active.tendering",
-        value=Decimal("250"), dp=datetime(2025, 2, 15, tzinfo=UTC),
-        cpv="79950000-8",
-    )
-    make_tender(
-        "k3", kyiv,
-        type_="negotiation", status="complete",
-        value=Decimal("80"), dp=datetime(2025, 2, 20, tzinfo=UTC),
-        cpv="33100000-1",
-    )
-    make_tender(
-        "l1", lviv,
-        type_="aboveThresholdUA", status="complete",
-        value=Decimal("400"), dp=datetime(2025, 3, 5, tzinfo=UTC),
-        cpv="33100000-1",
-    )
-    await session.flush()
-
-    # One contract on l1 to supplier A.
-    aw_id = _id("aw", tenders["l1"].id)
-    cn_id = _id("ct", tenders["l1"].id)
-    session.add(
-        Award(
-            id=aw_id,
-            lot_id=tenders["l1"].id,
-            supplier_id=sup_a.id,
-            status="active",
-            value_amount=Decimal("400"),
-        )
-    )
-    await session.flush()
-    session.add(
-        Contract(
-            id=cn_id,
-            award_id=aw_id,
-            supplier_id=sup_a.id,
-            status="active",
-            value_amount=Decimal("400"),
-            value_currency="UAH",
-            date_signed=datetime(2025, 3, 7, tzinfo=UTC),
-        )
-    )
-
-    # Some risk indicator rows so /statistics/indicators returns meaningful data.
-    session.add_all(
-        [
-            RiskIndicatorValue(
-                tender_id=tenders["k1"].id,
-                indicator_code="risk.single_bidding",
-                value_boolean=True,
-            ),
-            RiskIndicatorValue(
-                tender_id=tenders["k1"].id,
-                indicator_code="risk.non_competitive",
-                value_boolean=False,
-            ),
-            RiskIndicatorValue(
-                tender_id=tenders["k3"].id,
-                indicator_code="risk.non_competitive",
-                value_boolean=True,
-            ),
-        ]
-    )
-    await session.commit()
-    return {
-        "kyiv": kyiv, "lviv": lviv, "sup_a": sup_a, "sup_b": sup_b,
-        "tenders": tenders,
-    }
 
 
 # --- OpenAPI ---------------------------------------------------------------
@@ -276,9 +143,9 @@ async def test_dashboard_returns_kpis_and_distribution(client, seeded):
     by_label = {b["label"]: b["tender_count"] for b in buckets}
     assert by_label["aboveThresholdUA"] == 3
     assert by_label["negotiation"] == 1
-    # Monthly volume series — 4 tenders fall into 3 months (Jan/Feb/Mar 2025).
+    # Monthly volume series — 4 tenders fall into 3 months (Jan/Feb/Mar 2026).
     months = {p["period"][:7] for p in body["volume_over_time"]}
-    assert months == {"2025-01", "2025-02", "2025-03"}
+    assert months == {"2026-01", "2026-02", "2026-03"}
 
 
 # --- Statistics ------------------------------------------------------------
@@ -360,3 +227,84 @@ async def test_admin_recompute(client, seeded):
     # Four tenders → all processed; no error response.
     assert body["tenders_processed"] == 4
     assert body["bulk_rows_inserted"] >= 0
+
+
+# --- Extended filter / pagination coverage --------------------------------
+
+
+async def test_list_tenders_filter_by_procurement_method_type(client, seeded):
+    r = await client.get("/tenders?procurement_method_type=negotiation")
+    rows = r.json()["data"]
+    assert len(rows) == 1
+    assert rows[0]["id"] == seeded["tenders"]["k3"].id
+
+
+async def test_list_tenders_filter_by_region(client, seeded):
+    r = await client.get("/tenders?region=Київ")
+    rows = r.json()["data"]
+    assert {row["buyer_edrpou"] for row in rows} == {"buy-kyiv"}
+    assert len(rows) == 3
+
+
+async def test_list_tenders_filter_by_date_range(client, seeded):
+    r = await client.get(
+        "/tenders?date_from=2026-02-01T00:00:00Z&date_to=2026-03-01T00:00:00Z"
+    )
+    rows = r.json()["data"]
+    # k2 (Feb 15) and k3 (Feb 20) fall inside the window; k1 (Jan) and l1 (Mar) don't.
+    assert {row["id"] for row in rows} == {
+        seeded["tenders"]["k2"].id,
+        seeded["tenders"]["k3"].id,
+    }
+
+
+async def test_list_tenders_filter_by_value_range(client, seeded):
+    r = await client.get("/tenders?value_min=200&value_max=400")
+    rows = r.json()["data"]
+    # k2 (250) and l1 (400) match; k1 (100) and k3 (80) don't.
+    assert {row["id"] for row in rows} == {
+        seeded["tenders"]["k2"].id,
+        seeded["tenders"]["l1"].id,
+    }
+
+
+async def test_list_tenders_filter_by_supplier(client, seeded):
+    """Supplier filter exercises the Bid-join branch in apply_tender_filters.
+
+    The seeded dataset has awards (linked to suppliers) but no bids, so the
+    expected result is an empty list — what matters is that the filter branch
+    runs and the join compiles correctly.
+    """
+    sup_a_id = str(seeded["sup_a"].id)
+    r = await client.get(f"/tenders?supplier_id={sup_a_id}")
+    assert r.status_code == 200
+    assert r.json()["data"] == []
+
+
+async def test_list_tenders_pagination_round_trip(client, seeded):
+    r = await client.get("/tenders?limit=2")
+    page1 = r.json()
+    assert len(page1["data"]) == 2
+    cursor = page1["next_cursor"]
+    assert cursor
+
+    r2 = await client.get(f"/tenders?limit=2&cursor={cursor}")
+    page2 = r2.json()
+    assert len(page2["data"]) == 2
+    assert page2["next_cursor"] is None  # only 4 tenders total
+
+    # The two pages must be disjoint and together cover all 4 ids.
+    all_ids = {row["id"] for row in page1["data"] + page2["data"]}
+    assert len(all_ids) == 4
+
+
+async def test_export_csv_with_value_filter(client, seeded):
+    r = await client.get("/export/tenders.csv?value_min=200")
+    rows = list(csv.DictReader(io.StringIO(r.text)))
+    # k2 (250) and l1 (400) match.
+    assert len(rows) == 2
+
+
+async def test_export_json_has_attachment_header(client, seeded):
+    r = await client.get("/export/tenders.json")
+    assert r.headers["content-disposition"].startswith("attachment;")

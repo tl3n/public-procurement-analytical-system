@@ -144,3 +144,193 @@ async def test_run_sync_integrates_crawler_and_normalizer(session, tender_data):
     assert result == {"processed": 1, "failed": 0}
     assert await _count(session, Tender) == 1
     assert await _count(session, Bid) == 2
+
+
+# --- Edge cases ------------------------------------------------------------
+
+
+import hashlib  # noqa: E402  — used only by the helpers below
+
+
+def _id(*parts: str) -> str:
+    return hashlib.sha256("/".join(parts).encode()).hexdigest()[:32]
+
+
+def _minimal_tender(**overrides) -> dict:
+    """Build a tender payload with all the required scaffolding pre-filled."""
+    base = {
+        "id": _id("edge", "default"),
+        "tenderID": "UA-EDGE-DEFAULT",
+        "procurementMethod": "open",
+        "procurementMethodType": "aboveThresholdUA",
+        "status": "complete",
+        "datePublished": "2026-01-01T00:00:00+00:00",
+        "value": {"amount": 1000.0, "currency": "UAH"},
+        "procuringEntity": {
+            "identifier": {"id": "buy-edge", "legalName": "Edge Buyer"},
+            "name": "Edge Buyer",
+        },
+        "lots": [],
+        "items": [],
+        "bids": [],
+        "awards": [],
+        "contracts": [],
+        "complaints": [],
+        "documents": [],
+    }
+    base.update(overrides)
+    return base
+
+
+async def test_persist_tender_with_explicit_lots(session):
+    """Tender with explicit lots — items/bids/awards anchor to their relatedLot."""
+    lot1 = _id("edge", "lot1")
+    lot2 = _id("edge", "lot2")
+    payload = _minimal_tender(
+        id=_id("edge", "with-lots"),
+        lots=[
+            {
+                "id": lot1,
+                "title": "Lot A",
+                "value": {"amount": 600.0, "currency": "UAH"},
+            },
+            {
+                "id": lot2,
+                "title": "Lot B",
+                "value": {"amount": 400.0, "currency": "UAH"},
+            },
+        ],
+        items=[
+            {
+                "id": _id("edge", "item1"),
+                "description": "for lot A",
+                "classification": {"id": "11111111-1"},
+                "relatedLot": lot1,
+            },
+            {
+                "id": _id("edge", "item2"),
+                "description": "for lot B",
+                "classification": {"id": "22222222-2"},
+                "relatedLot": lot2,
+            },
+        ],
+    )
+
+    await persist_tender(session, payload)
+    await session.commit()
+
+    lots = (await session.execute(select(Lot))).scalars().all()
+    assert {l.id for l in lots} == {lot1, lot2}
+    items = (await session.execute(select(Item))).scalars().all()
+    by_lot = {it.lot_id: it.cpv_code for it in items}
+    assert by_lot[lot1] == "11111111-1"
+    assert by_lot[lot2] == "22222222-2"
+
+
+async def test_persist_bid_with_lot_values_produces_one_row_per_lot(session):
+    """A multi-lot bid (lotValues with N entries) yields N bid rows.
+
+    The synthesized id keeps each row unique even though the source bid id is
+    shared across lots — see _hash_id in the normalizer.
+    """
+    lot1 = _id("edge", "ml-lot1")
+    lot2 = _id("edge", "ml-lot2")
+    bid_id = _id("edge", "ml-bid")
+    payload = _minimal_tender(
+        id=_id("edge", "multi-lot-bid"),
+        lots=[{"id": lot1}, {"id": lot2}],
+        bids=[
+            {
+                "id": bid_id,
+                "status": "active",
+                "lotValues": [
+                    {"relatedLot": lot1, "value": {"amount": 100, "currency": "UAH"}},
+                    {"relatedLot": lot2, "value": {"amount": 200, "currency": "UAH"}},
+                ],
+                "tenderers": [
+                    {
+                        "identifier": {"id": "sup-edge"},
+                        "name": "Edge Supplier",
+                    }
+                ],
+            }
+        ],
+    )
+
+    await persist_tender(session, payload)
+    await session.commit()
+
+    bids = (await session.execute(select(Bid).order_by(Bid.lot_id))).scalars().all()
+    assert len(bids) == 2
+    by_lot = {b.lot_id: float(b.value_amount) for b in bids}
+    assert by_lot[lot1] == 100.0
+    assert by_lot[lot2] == 200.0
+    # Both rows reference the same supplier (find-or-create by edrpou).
+    assert await _count(session, Supplier) == 1
+
+
+async def test_persist_tender_handles_missing_procuring_entity(session):
+    """Synthesizes a placeholder ProcuringEntity when the API omits the field."""
+    payload = _minimal_tender(
+        id=_id("edge", "no-pe"),
+        procuringEntity=None,
+    )
+
+    await persist_tender(session, payload)
+    await session.commit()
+
+    tender = await session.get(Tender, payload["id"])
+    assert tender is not None
+    assert tender.procuring_entity_id is not None
+    pe = await session.get(ProcuringEntity, tender.procuring_entity_id)
+    assert pe is not None
+    # No edrpou or name when the source has none.
+    assert pe.edrpou is None
+    assert pe.name is None
+
+
+async def test_persist_tender_handles_missing_optional_top_level_fields(session):
+    """Title, description, value and tenderPeriod are all optional."""
+    payload = _minimal_tender(
+        id=_id("edge", "minimal"),
+        title=None,
+        description=None,
+        value=None,
+        tenderPeriod=None,
+        datePublished=None,
+    )
+
+    await persist_tender(session, payload)
+    await session.commit()
+
+    tender = await session.get(Tender, payload["id"])
+    assert tender is not None
+    assert tender.title is None
+    assert tender.value_amount is None
+    assert tender.value_currency is None
+    assert tender.date_published is None
+    assert tender.tender_period_start is None
+    # The synthetic lot is still created.
+    assert await _count(session, Lot) == 1
+
+
+async def test_persist_bid_without_tenderers_has_null_supplier(session):
+    """A bid with no `tenderers` array yields a bid row with supplier_id=NULL."""
+    payload = _minimal_tender(
+        id=_id("edge", "anon-bid"),
+        bids=[
+            {
+                "id": _id("edge", "bid-anon"),
+                "status": "active",
+                "value": {"amount": 1.0, "currency": "UAH"},
+                # No "tenderers" key.
+            }
+        ],
+    )
+
+    await persist_tender(session, payload)
+    await session.commit()
+
+    bid = (await session.execute(select(Bid))).scalars().one()
+    assert bid.supplier_id is None
+    assert await _count(session, Supplier) == 0
