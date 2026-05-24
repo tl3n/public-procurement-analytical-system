@@ -3,15 +3,18 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
+import { INDICATOR_METADATA } from "@/lib/indicators";
 
 export interface Filters {
   cpv?: string;
   region?: string;
   procurement_method_type?: string;
+  status?: string;
   date_from?: string;
   date_to?: string;
   value_min?: string;
   value_max?: string;
+  indicator_true?: string[];
 }
 
 const PROCEDURE_TYPES = [
@@ -29,6 +32,22 @@ const PROCEDURE_TYPES = [
   "competitiveDialogueEU",
 ];
 
+const STATUSES = [
+  "draft",
+  "active.tendering",
+  "active.enquiries",
+  "active.auction",
+  "active.qualification",
+  "active.awarded",
+  "complete",
+  "cancelled",
+  "unsuccessful",
+];
+
+const BOOLEAN_INDICATORS = Object.values(INDICATOR_METADATA).filter(
+  (m) => m.valueType === "boolean",
+);
+
 interface Props {
   values: Filters;
   onApply: (filters: Filters) => void;
@@ -38,6 +57,17 @@ interface Props {
 export function FilterSidebar({ values, onApply, onReset }: Props) {
   function update<K extends keyof Filters>(key: K, v: Filters[K]) {
     onApply({ ...values, [key]: v || undefined });
+  }
+
+  function toggleIndicator(code: string) {
+    const current = values.indicator_true ?? [];
+    const next = current.includes(code)
+      ? current.filter((c) => c !== code)
+      : [...current, code];
+    onApply({
+      ...values,
+      indicator_true: next.length > 0 ? next : undefined,
+    });
   }
 
   return (
@@ -71,6 +101,19 @@ export function FilterSidebar({ values, onApply, onReset }: Props) {
             {PROCEDURE_TYPES.map((t) => (
               <option key={t} value={t}>
                 {t}
+              </option>
+            ))}
+          </Select>
+        </Field>
+        <Field label="Статус">
+          <Select
+            value={values.status ?? ""}
+            onChange={(e) => update("status", e.target.value)}
+          >
+            <option value="">— будь-який —</option>
+            {STATUSES.map((s) => (
+              <option key={s} value={s}>
+                {s}
               </option>
             ))}
           </Select>
@@ -118,6 +161,29 @@ export function FilterSidebar({ values, onApply, onReset }: Props) {
               onChange={(e) => update("value_max", e.target.value)}
             />
           </Field>
+        </div>
+        <div className="flex flex-col gap-2">
+          <Label>Спрацьовані індикатори ризику</Label>
+          <p className="text-[11px] text-muted-foreground">
+            Декілька варіантів — AND (тендер має задовольняти всі обрані).
+          </p>
+          {BOOLEAN_INDICATORS.map((ind) => {
+            const checked = (values.indicator_true ?? []).includes(ind.code);
+            return (
+              <label
+                key={ind.code}
+                className="flex cursor-pointer items-start gap-2 text-sm"
+              >
+                <input
+                  type="checkbox"
+                  checked={checked}
+                  onChange={() => toggleIndicator(ind.code)}
+                  className="mt-0.5"
+                />
+                <span>{ind.name}</span>
+              </label>
+            );
+          })}
         </div>
         <Button variant="outline" size="sm" onClick={onReset}>
           Скинути фільтри

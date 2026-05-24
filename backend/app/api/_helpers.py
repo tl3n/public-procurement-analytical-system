@@ -19,7 +19,7 @@ from app.api.schemas import (
     TenderDetail,
     TenderSummary,
 )
-from app.models import Bid, Item, Lot, ProcuringEntity, Tender
+from app.models import Bid, Item, Lot, ProcuringEntity, RiskIndicatorValue, Tender
 
 
 # --- Keyset cursor ---------------------------------------------------------
@@ -49,16 +49,20 @@ def apply_tender_filters(
     cpv: str | None = None,
     region: str | None = None,
     procurement_method_type: str | None = None,
+    status: str | None = None,
     date_from: datetime | None = None,
     date_to: datetime | None = None,
     value_min: Decimal | None = None,
     value_max: Decimal | None = None,
+    indicator_true: list[str] | None = None,
 ) -> Select:
     """Apply the shared tender-search filters to ``stmt`` (a ``select(Tender)``)."""
     if procuring_entity_id is not None:
         stmt = stmt.where(Tender.procuring_entity_id == procuring_entity_id)
     if procurement_method_type is not None:
         stmt = stmt.where(Tender.procurement_method_type == procurement_method_type)
+    if status is not None:
+        stmt = stmt.where(Tender.status == status)
     if date_from is not None:
         stmt = stmt.where(Tender.date_published >= date_from)
     if date_to is not None:
@@ -87,6 +91,17 @@ def apply_tender_filters(
                 .where(Bid.supplier_id == supplier_id)
             )
         )
+    # Each requested indicator code is an AND constraint: the tender must have
+    # value_boolean=True for every code in the list.
+    if indicator_true:
+        for code in indicator_true:
+            stmt = stmt.where(
+                Tender.id.in_(
+                    select(RiskIndicatorValue.tender_id)
+                    .where(RiskIndicatorValue.indicator_code == code)
+                    .where(RiskIndicatorValue.value_boolean.is_(True))
+                )
+            )
     return stmt
 
 

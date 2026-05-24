@@ -77,10 +77,12 @@ def _common_filters(
     cpv: str | None = None,
     region: str | None = None,
     procurement_method_type: str | None = None,
+    status: str | None = None,
     date_from: datetime | None = None,
     date_to: datetime | None = None,
     value_min: Decimal | None = None,
     value_max: Decimal | None = None,
+    indicator_true: list[str] | None = Query(default=None),
 ) -> dict:
     return dict(
         procuring_entity_id=procuring_entity_id,
@@ -88,10 +90,12 @@ def _common_filters(
         cpv=cpv,
         region=region,
         procurement_method_type=procurement_method_type,
+        status=status,
         date_from=date_from,
         date_to=date_to,
         value_min=value_min,
         value_max=value_max,
+        indicator_true=indicator_true,
     )
 
 

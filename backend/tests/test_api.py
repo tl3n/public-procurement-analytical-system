@@ -308,3 +308,28 @@ async def test_export_csv_with_value_filter(client, seeded):
 async def test_export_json_has_attachment_header(client, seeded):
     r = await client.get("/export/tenders.json")
     assert r.headers["content-disposition"].startswith("attachment;")
+
+
+async def test_list_tenders_filter_by_status(client, seeded):
+    """Only the explicit `status` is returned (k2 is active.tendering)."""
+    r = await client.get("/tenders?status=active.tendering")
+    rows = r.json()["data"]
+    assert {row["id"] for row in rows} == {seeded["tenders"]["k2"].id}
+
+
+async def test_list_tenders_filter_by_single_indicator_true(client, seeded):
+    """k1 has risk.single_bidding=True in the seeded data; nothing else does."""
+    r = await client.get("/tenders?indicator_true=risk.single_bidding")
+    rows = r.json()["data"]
+    assert {row["id"] for row in rows} == {seeded["tenders"]["k1"].id}
+
+
+async def test_list_tenders_filter_by_multiple_indicators_is_and(client, seeded):
+    """Multiple indicator_true values combine with AND — no seeded tender has
+    both single_bidding and non_competitive flagged, so the result is empty."""
+    r = await client.get(
+        "/tenders"
+        "?indicator_true=risk.single_bidding"
+        "&indicator_true=risk.non_competitive"
+    )
+    assert r.json()["data"] == []

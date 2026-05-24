@@ -170,10 +170,13 @@ export interface TenderListFilters {
   cpv?: string;
   region?: string;
   procurement_method_type?: string;
+  status?: string;
   date_from?: string;
   date_to?: string;
   value_min?: string;
   value_max?: string;
+  /** Each entry is an indicator code. Multiple entries combine with AND. */
+  indicator_true?: string[];
   cursor?: string;
   limit?: number;
 }

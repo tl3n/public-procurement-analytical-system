@@ -14,7 +14,8 @@ import type {
 
 const API_BASE = "/api";
 
-type Params = Record<string, string | number | undefined | null>;
+type ParamValue = string | number | undefined | null | readonly string[];
+type Params = Record<string, ParamValue>;
 
 async function fetchJson<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(API_BASE + path, init);
@@ -28,7 +29,14 @@ function withParams(path: string, params?: Params): string {
   if (!params) return path;
   const search = new URLSearchParams();
   for (const [key, value] of Object.entries(params)) {
-    if (value !== undefined && value !== null && value !== "") {
+    if (value === undefined || value === null || value === "") continue;
+    if (Array.isArray(value)) {
+      for (const v of value) {
+        if (v !== undefined && v !== null && v !== "") {
+          search.append(key, String(v));
+        }
+      }
+    } else {
       search.set(key, String(value));
     }
   }
