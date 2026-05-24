@@ -153,6 +153,11 @@ class RankingsResponse(BaseModel):
     suppliers: list[SupplierRankOut]
 
 
+class DistributionsResponse(BaseModel):
+    by_cpv: list[DistributionBucketOut]
+    by_region: list[DistributionBucketOut]
+
+
 class IndicatorReportRow(BaseModel):
     code: str
     name: str

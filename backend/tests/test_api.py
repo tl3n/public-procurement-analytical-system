@@ -177,6 +177,7 @@ async def test_openapi_schema_is_served(client):
         "/tenders/{tender_id}",
         "/dashboard",
         "/statistics/rankings",
+        "/statistics/distributions",
         "/statistics/indicators",
         "/export/tenders.csv",
         "/export/tenders.json",
@@ -281,6 +282,19 @@ async def test_dashboard_returns_kpis_and_distribution(client, seeded):
 
 
 # --- Statistics ------------------------------------------------------------
+
+
+async def test_statistics_distributions(client, seeded):
+    r = await client.get("/statistics/distributions")
+    assert r.status_code == 200
+    body = r.json()
+    cpv_by_label = {b["label"]: b for b in body["by_cpv"]}
+    # Two tenders per CPV in the seeded fixture.
+    assert cpv_by_label["79950000-8"]["tender_count"] == 2
+    assert cpv_by_label["33100000-1"]["tender_count"] == 2
+    region_by_label = {b["label"]: b for b in body["by_region"]}
+    assert region_by_label["Київ"]["tender_count"] == 3
+    assert region_by_label["Львівська область"]["tender_count"] == 1
 
 
 async def test_statistics_rankings(client, seeded):

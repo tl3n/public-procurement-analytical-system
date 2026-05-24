@@ -10,6 +10,8 @@ from app.analytics import aggregations
 from app.analytics.indicators import registry
 from app.api.schemas import (
     BuyerRankOut,
+    DistributionBucketOut,
+    DistributionsResponse,
     IndicatorReportResponse,
     IndicatorReportRow,
     RankingsResponse,
@@ -67,6 +69,55 @@ async def get_rankings(
                 total_value=r.total_value,
             )
             for r in supplier_rows
+        ],
+    )
+    await cache.set_json(key, response.model_dump(mode="json"))
+    return response
+
+
+def _distributions_cache_key(since: datetime | None, until: datetime | None) -> str:
+    return (
+        "distributions:v1"
+        f":since={since.isoformat() if since else ''}"
+        f":until={until.isoformat() if until else ''}"
+    )
+
+
+@router.get("/distributions", response_model=DistributionsResponse)
+async def get_distributions(
+    since: datetime | None = None,
+    until: datetime | None = None,
+    session: AsyncSession = Depends(get_session),
+    cache: Cache = Depends(get_cache),
+):
+    """Top CPV codes and buyer regions by tender count within the time window."""
+    key = _distributions_cache_key(since, until)
+    cached = await cache.get_json(key)
+    if cached is not None:
+        return cached
+
+    cpv_buckets = await aggregations.distribution_by_cpv(
+        session, since=since, until=until
+    )
+    region_buckets = await aggregations.distribution_by_region(
+        session, since=since, until=until
+    )
+    response = DistributionsResponse(
+        by_cpv=[
+            DistributionBucketOut(
+                label=b.label,
+                tender_count=b.tender_count,
+                total_value=b.total_value,
+            )
+            for b in cpv_buckets
+        ],
+        by_region=[
+            DistributionBucketOut(
+                label=b.label,
+                tender_count=b.tender_count,
+                total_value=b.total_value,
+            )
+            for b in region_buckets
         ],
     )
     await cache.set_json(key, response.model_dump(mode="json"))

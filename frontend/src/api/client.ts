@@ -3,6 +3,7 @@
 
 import type {
   DashboardResponse,
+  DistributionsResponse,
   IndicatorReportResponse,
   RankingsResponse,
   RecomputeResponse,
@@ -48,6 +49,11 @@ export const api = {
     params: { limit?: number; since?: string; until?: string } = {},
   ): Promise<RankingsResponse> =>
     fetchJson(withParams("/statistics/rankings", params)),
+
+  getDistributions: (
+    params: { since?: string; until?: string } = {},
+  ): Promise<DistributionsResponse> =>
+    fetchJson(withParams("/statistics/distributions", params)),
 
   getIndicatorReport: (): Promise<IndicatorReportResponse> =>
     fetchJson("/statistics/indicators"),

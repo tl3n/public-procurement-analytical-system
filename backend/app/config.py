@@ -16,8 +16,8 @@ class Settings(BaseSettings):
     # Collector
     sync_interval_minutes: int = 10
     max_tenders: int = 20000
-    # Feed offset seed for the first run: Unix timestamp (default = 2025-01-01).
-    initial_load_start_timestamp: int = 1735689600
+    # Feed offset seed for the first run: Unix timestamp (default = 2026-01-01).
+    initial_load_start_timestamp: int = 1767225600
 
     # Cache
     cache_ttl_seconds: int = 300

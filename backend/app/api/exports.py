@@ -139,4 +139,8 @@ async def export_tenders_json(
             first = False
         yield "]"
 
-    return StreamingResponse(generate(), media_type="application/json")
+    return StreamingResponse(
+        generate(),
+        media_type="application/json",
+        headers={"Content-Disposition": "attachment; filename=tenders.json"},
+    )

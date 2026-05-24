@@ -139,6 +139,11 @@ export interface RankingsResponse {
   suppliers: SupplierRankOut[];
 }
 
+export interface DistributionsResponse {
+  by_cpv: DistributionBucketOut[];
+  by_region: DistributionBucketOut[];
+}
+
 export interface IndicatorReportRow {
   code: string;
   name: string;
