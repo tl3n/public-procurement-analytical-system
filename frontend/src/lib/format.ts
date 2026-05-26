@@ -21,13 +21,21 @@ export function formatMoney(
   if (value === null || value === undefined || value === "") return "—";
   const n = typeof value === "string" ? Number(value) : value;
   if (Number.isNaN(n)) return "—";
+  const cur = localiseCurrency(currency);
   if (Math.abs(n) >= 1_000_000_000) {
-    return `${numberFmt.format(Math.round((n / 1_000_000_000) * 10) / 10)} млрд ${currency}`;
+    return `${numberFmt.format(Math.round((n / 1_000_000_000) * 10) / 10)} млрд ${cur}`;
   }
   if (Math.abs(n) >= 1_000_000) {
-    return `${numberFmt.format(Math.round((n / 1_000_000) * 10) / 10)} млн ${currency}`;
+    return `${numberFmt.format(Math.round((n / 1_000_000) * 10) / 10)} млн ${cur}`;
   }
-  return `${numberFmt.format(Math.round(n))} ${currency}`;
+  return `${numberFmt.format(Math.round(n))} ${cur}`;
+}
+
+// Prozorro returns ISO-4217 codes ("UAH"); for a Ukrainian audience the local
+// abbreviation reads more naturally. Other currencies pass through as-is.
+function localiseCurrency(code: string): string {
+  if (code === "UAH") return "грн";
+  return code;
 }
 
 export function formatMonth(iso: string): string {

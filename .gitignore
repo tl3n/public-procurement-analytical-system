@@ -25,3 +25,5 @@ dist/
 .DS_Store
 
 docs/
+CLAUDE.local.md
+.claude/

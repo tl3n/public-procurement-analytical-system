@@ -54,6 +54,17 @@ export function RiskIndicatorsSection({ values }: Props) {
 }
 
 function renderValue(v: RiskIndicatorValueOut) {
+  // Both present: numeric value colored by the outlier boolean flag.
+  // Used by price_deviation which returns deviation ratio + IQR outlier flag.
+  if (v.value_boolean !== null && v.value_numeric !== null) {
+    const num = Number(v.value_numeric);
+    const formatted = Number.isFinite(num) ? num.toFixed(3) : v.value_numeric;
+    return (
+      <Badge variant={v.value_boolean ? "danger" : "default"}>
+        {formatted}
+      </Badge>
+    );
+  }
   if (v.value_boolean === true) {
     return <Badge variant="danger">Спрацював</Badge>;
   }

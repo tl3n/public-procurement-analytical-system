@@ -2,7 +2,10 @@
 // Vite's dev-server proxy (see vite.config.ts) can route them to FastAPI.
 
 import type {
+  ConcentrationResponse,
+  CorrelationResponse,
   DashboardResponse,
+  DecompositionResponse,
   DistributionsResponse,
   IndicatorReportResponse,
   RankingsResponse,
@@ -65,6 +68,17 @@ export const api = {
 
   getIndicatorReport: (): Promise<IndicatorReportResponse> =>
     fetchJson("/statistics/indicators"),
+
+  getConcentration: (
+    params: { since?: string; until?: string } = {},
+  ): Promise<ConcentrationResponse> =>
+    fetchJson(withParams("/statistics/concentration", params)),
+
+  getCorrelation: (): Promise<CorrelationResponse> =>
+    fetchJson("/statistics/correlation"),
+
+  getDecomposition: (): Promise<DecompositionResponse> =>
+    fetchJson("/statistics/decomposition"),
 
   recompute: (): Promise<RecomputeResponse> =>
     fetchJson("/admin/recompute", { method: "POST" }),

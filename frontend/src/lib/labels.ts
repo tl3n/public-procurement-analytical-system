@@ -10,6 +10,7 @@ export const PROCEDURE_TYPE_LABELS: Record<string, string> = {
   aboveThresholdEU: "Понадпорогові (EU)",
   belowThreshold: "Допорогові",
   priceQuotation: "Запит цінових пропозицій",
+  requestForProposal: "Запит пропозицій",
   negotiation: "Переговорна процедура",
   "negotiation.quick": "Переговорна (скорочена)",
   reporting: "Звіт про договір",

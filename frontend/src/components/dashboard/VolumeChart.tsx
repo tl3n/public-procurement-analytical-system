@@ -1,7 +1,7 @@
 import {
+  Area,
+  AreaChart,
   CartesianGrid,
-  Line,
-  LineChart,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -9,6 +9,7 @@ import {
 } from "recharts";
 
 import type { TimeSeriesPoint } from "@/api/types";
+import { ChartTooltip } from "@/components/charts/ChartTooltip";
 import {
   Card,
   CardDescription,
@@ -28,11 +29,25 @@ export function VolumeChart({ points }: Props) {
     tender_count: p.tender_count,
   }));
 
+  const total = data.reduce((acc, p) => acc + p.tender_count, 0);
+
   return (
     <Card className="p-6">
-      <CardHeader className="p-0 pb-4">
-        <CardTitle className="text-base">Динаміка кількості тендерів</CardTitle>
-        <CardDescription>Помісячно</CardDescription>
+      <CardHeader className="flex flex-row items-start justify-between space-y-0 p-0 pb-4">
+        <div>
+          <CardTitle className="text-base">Динаміка кількості тендерів</CardTitle>
+          <CardDescription>Помісячно</CardDescription>
+        </div>
+        {data.length > 0 && (
+          <div className="text-right">
+            <p className="text-[10px] uppercase tracking-wider text-muted-foreground">
+              Всього у періоді
+            </p>
+            <p className="font-mono text-base font-semibold">
+              {formatCount(total)}
+            </p>
+          </div>
+        )}
       </CardHeader>
       {data.length === 0 ? (
         <p className="py-12 text-center text-sm text-muted-foreground">
@@ -40,34 +55,70 @@ export function VolumeChart({ points }: Props) {
         </p>
       ) : (
         <ResponsiveContainer width="100%" height={280}>
-          <LineChart
+          <AreaChart
             data={data}
             margin={{ top: 8, right: 16, bottom: 8, left: 8 }}
           >
-            <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+            <defs>
+              <linearGradient id="volumeFill" x1="0" y1="0" x2="0" y2="1">
+                <stop
+                  offset="0%"
+                  stopColor="hsl(var(--primary))"
+                  stopOpacity={0.28}
+                />
+                <stop
+                  offset="100%"
+                  stopColor="hsl(var(--primary))"
+                  stopOpacity={0}
+                />
+              </linearGradient>
+            </defs>
+            <CartesianGrid
+              strokeDasharray="3 3"
+              stroke="hsl(var(--border))"
+              vertical={false}
+            />
             <XAxis
               dataKey="label"
-              tick={{ fontSize: 12 }}
+              tick={{ fontSize: 11 }}
               stroke="hsl(var(--muted-foreground))"
+              tickLine={false}
+              axisLine={false}
             />
             <YAxis
-              tick={{ fontSize: 12 }}
+              tick={{ fontSize: 11 }}
               stroke="hsl(var(--muted-foreground))"
+              tickLine={false}
+              axisLine={false}
               tickFormatter={(n) => formatCount(n)}
+              width={48}
             />
             <Tooltip
-              labelFormatter={(label) => String(label)}
-              formatter={(value) => [formatCount(Number(value)), "тендери"]}
+              cursor={{
+                stroke: "hsl(var(--primary))",
+                strokeWidth: 1,
+                strokeDasharray: "3 3",
+              }}
+              content={
+                <ChartTooltip
+                  formatValue={(v) => formatCount(v)}
+                />
+              }
             />
-            <Line
+            <Area
               type="monotone"
               dataKey="tender_count"
+              name="Тендери"
               stroke="hsl(var(--primary))"
               strokeWidth={2}
-              dot={{ r: 3 }}
-              activeDot={{ r: 5 }}
+              fill="url(#volumeFill)"
+              activeDot={{
+                r: 5,
+                strokeWidth: 2,
+                stroke: "hsl(var(--card))",
+              }}
             />
-          </LineChart>
+          </AreaChart>
         </ResponsiveContainer>
       )}
     </Card>

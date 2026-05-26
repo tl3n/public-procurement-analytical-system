@@ -4,6 +4,9 @@ Numeric: signed relative deviation of a tender's expected value from the
 median expected value of comparable tenders (same CPV, prior 12 months).
 Positive values flag overstatement; negative values flag understatement that
 may be designed to slip under a procurement threshold.
+
+Boolean: True when the tender's price is a statistical outlier in the
+reference distribution (Tukey's 1.5×IQR rule applied to comparable values).
 """
 
 from datetime import timedelta
@@ -17,6 +20,7 @@ from app.analytics.indicators.base import (
     IndicatorDescription,
     IndicatorResult,
 )
+from app.analytics.statistics import iqr_outliers
 from app.models import Item, Lot, Tender
 
 
@@ -34,8 +38,9 @@ class PriceDeviationIndicator(Indicator):
             interpretation=(
                 "Signed relative deviation of the tender's expected value from "
                 "the median expected value of tenders with the same CPV in the "
-                "previous 12 months. NULL when fewer than 30 comparable "
-                "tenders exist."
+                "previous 12 months. Boolean True when the price is a "
+                "statistical outlier (Tukey 1.5×IQR). NULL when fewer than "
+                "30 comparable tenders exist."
             ),
         )
 
@@ -88,4 +93,20 @@ class PriceDeviationIndicator(Indicator):
         if row.n < self.min_reference_size or row.median in (None, 0):
             return IndicatorResult(code)
         deviation = (tender.value_amount - row.median) / row.median
-        return IndicatorResult(code, value_numeric=Decimal(deviation))
+
+        # Fetch all comparable values to apply Tukey's IQR outlier test.
+        # The tender itself is added to the reference set so the IQR is
+        # computed on the full market picture including this procedure.
+        values_rows = (
+            await session.execute(select(tenders_in_window.c.value_amount))
+        ).scalars().all()
+        comparable_values = [float(v) for v in values_rows]
+        all_values = comparable_values + [float(tender.value_amount)]
+        outliers = iqr_outliers(all_values)
+        is_outlier = float(tender.value_amount) in outliers
+
+        return IndicatorResult(
+            code,
+            value_boolean=is_outlier,
+            value_numeric=Decimal(deviation),
+        )

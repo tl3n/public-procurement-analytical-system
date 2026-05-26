@@ -164,6 +164,37 @@ export interface RecomputeResponse {
   bulk_rows_inserted: number;
 }
 
+export interface ConcentrationBucketOut {
+  cpv: string;
+  hhi: number;
+  gini: number;
+  supplier_count: number;
+  total_value: string | null;
+}
+
+export interface ConcentrationResponse {
+  rows: ConcentrationBucketOut[];
+}
+
+export interface CorrelationResponse {
+  pearson: number | null;
+  spearman: number | null;
+  n_pairs: number;
+  strength: string;
+}
+
+export interface DecompositionPoint {
+  period: string;
+  observed: number;
+  trend: number | null;
+  seasonal: number | null;
+  resid: number | null;
+}
+
+export interface DecompositionResponse {
+  points: DecompositionPoint[];
+}
+
 export interface TenderListFilters {
   procuring_entity_id?: string;
   supplier_id?: string;

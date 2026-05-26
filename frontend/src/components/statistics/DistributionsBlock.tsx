@@ -9,6 +9,7 @@ import {
 } from "recharts";
 
 import type { DistributionBucketOut } from "@/api/types";
+import { ChartTooltip } from "@/components/charts/ChartTooltip";
 import {
   Card,
   CardDescription,
@@ -29,7 +30,7 @@ export function DistributionsBlock({ byCpv, byRegion }: Props) {
         title="Розподіл за CPV"
         description="Топ кодів класифікатора"
         data={byCpv}
-        labelWidth={120}
+        labelWidth={130}
       />
       <DistributionCard
         title="Розподіл за регіоном замовника"
@@ -90,10 +91,16 @@ function DistributionCard({
               stroke="hsl(var(--muted-foreground))"
             />
             <Tooltip
-              formatter={(value) => [formatCount(Number(value)), "тендери"]}
+              cursor={{ fill: "hsl(var(--primary) / 0.06)" }}
+              content={
+                <ChartTooltip
+                  formatValue={(v) => formatCount(v)}
+                />
+              }
             />
             <Bar
               dataKey="tender_count"
+              name="Тендери"
               fill="hsl(var(--primary))"
               radius={[0, 4, 4, 0]}
             />

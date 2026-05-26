@@ -54,13 +54,16 @@ export function TenderTable({ tenders }: Props) {
                 {t.title ?? "—"}
               </p>
             </TableCell>
-            <TableCell className="text-muted-foreground">
+            <TableCell
+              className="truncate whitespace-nowrap text-muted-foreground"
+              title={labelForType(t.procurement_method_type) ?? undefined}
+            >
               {labelForType(t.procurement_method_type)}
             </TableCell>
             <TableCell>
               <StatusBadge status={t.status} />
             </TableCell>
-            <TableCell className="text-right font-medium">
+            <TableCell className="whitespace-nowrap text-right font-medium">
               {formatMoney(t.value_amount, t.value_currency ?? "грн")}
             </TableCell>
             <TableCell

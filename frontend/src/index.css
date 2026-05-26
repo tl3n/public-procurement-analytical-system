@@ -4,15 +4,17 @@
 
 @layer base {
   :root {
-    /* Surfaces — warmer neutral than pure white to soften the page. */
-    --background: 220 20% 98%;
+    /* Surfaces — soft warm paper instead of cool flat white. A touch of
+     * warmth in the background reads as "considered" rather than "blank
+     * shadcn starter" without compromising contrast on a projector. */
+    --background: 36 33% 98%;
     --foreground: 222 47% 11%;
     --card: 0 0% 100%;
     --card-foreground: 222 47% 11%;
 
-    /* Brand — clear blue (Tailwind blue-600). Used for active nav, charts,
-     * primary CTAs. Foreground is white for contrast. */
-    --primary: 217 91% 50%;
+    /* Brand — a slightly deeper, less saturated blue. Reads more
+     * institutional than Tailwind blue-600 while staying recognisable. */
+    --primary: 222 84% 46%;
     --primary-foreground: 0 0% 100%;
 
     /* Neutral secondary. */
@@ -30,7 +32,7 @@
     /* Lines + form-control borders. */
     --border: 220 13% 91%;
     --input: 220 13% 91%;
-    --ring: 217 91% 50%;
+    --ring: 222 84% 46%;
 
     /* Semantic accents available as utility tokens. */
     --success: 142 71% 36%;
@@ -40,9 +42,38 @@
     --radius: 0.75rem;
   }
 
+  html {
+    /* Reserve scrollbar gutter so layout doesn't jump when a view exceeds
+     * the viewport (e.g. opening a long Statistics page after Dashboard). */
+    scrollbar-gutter: stable;
+  }
+
   body {
     @apply bg-background text-foreground antialiased;
-    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+    font-family: "Manrope", ui-sans-serif, system-ui, -apple-system,
+      "Segoe UI", sans-serif;
+    font-feature-settings: "ss01", "cv11";
+    /* Tabular numerals everywhere — keeps amount columns aligned across
+     * tables, KPI cards and chart axes. */
+    font-variant-numeric: tabular-nums;
+    /* Soft layered glow at the top of the page. Faint enough not to
+     * distract from data but enough to feel intentional. */
+    background-image:
+      radial-gradient(
+        ellipse 80% 50% at 50% -10%,
+        hsl(222 84% 46% / 0.06),
+        transparent 70%
+      ),
+      radial-gradient(
+        ellipse 60% 40% at 100% 0%,
+        hsl(38 92% 50% / 0.04),
+        transparent 60%
+      );
+    background-attachment: fixed;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    letter-spacing: -0.015em;
   }
 
   /* Subtle scrollbar styling on long lists. */
@@ -56,5 +87,11 @@
   }
   ::-webkit-scrollbar-thumb:hover {
     background: hsl(var(--muted-foreground) / 0.4);
+  }
+
+  /* Selection — branded rather than the default browser blue. */
+  ::selection {
+    background: hsl(var(--primary) / 0.18);
+    color: hsl(var(--foreground));
   }
 }

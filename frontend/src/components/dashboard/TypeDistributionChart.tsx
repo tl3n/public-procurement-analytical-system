@@ -8,6 +8,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { formatCount, formatMoney } from "@/lib/format";
+import { labelForType } from "@/lib/labels";
 
 interface Props {
   distribution: DistributionBucketOut[];
@@ -40,9 +41,11 @@ export function TypeDistributionChart({ distribution }: Props) {
                   search={{ procurement_method_type: b.label } as never}
                   className="block rounded-md p-2 hover:bg-muted"
                 >
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="font-medium">{b.label}</span>
-                    <span className="text-muted-foreground">
+                  <div className="flex items-center justify-between gap-3 text-sm">
+                    <span className="min-w-0 truncate font-medium">
+                      {labelForType(b.label)}
+                    </span>
+                    <span className="shrink-0 text-muted-foreground">
                       {formatCount(b.tender_count)}
                       {" · "}
                       {formatMoney(b.total_value)}

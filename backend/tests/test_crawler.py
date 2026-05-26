@@ -145,3 +145,80 @@ async def test_cap_smaller_than_page_size_is_exact(session):
     state = await session.get(SyncState, "tenders")
     assert state is not None
     assert state.last_offset == "p0"
+
+
+# --- Monthly stratified mode ----------------------------------------------
+
+
+async def test_crawl_monthly_stops_at_quota_and_advances(session):
+    """A 3-month feed with quota=2 must yield 2 records per month, then end."""
+    # Three months, each with three records. dateModified inside each month
+    # must monotonically increase and stay within the month range so the
+    # boundary detection sees crossings exactly at the month border.
+    pages_by_offset: dict[str, dict] = {}
+
+    def _record(rid: str, dm: str) -> dict:
+        return {"id": rid, "dateModified": dm}
+
+    pages_by_offset["1767225600"] = {
+        # 2026-01-01 onward
+        "data": [
+            _record("jan-1", "2026-01-02T00:00:00+00:00"),
+            _record("jan-2", "2026-01-10T00:00:00+00:00"),
+            _record("jan-3", "2026-01-25T00:00:00+00:00"),
+            _record("feb-1", "2026-02-01T05:00:00+00:00"),
+        ],
+        "next_page": {"offset": "after-jan"},
+    }
+    pages_by_offset["1769904000"] = {
+        # 2026-02-01 onward
+        "data": [
+            _record("feb-1", "2026-02-01T05:00:00+00:00"),
+            _record("feb-2", "2026-02-10T00:00:00+00:00"),
+            _record("feb-3", "2026-02-25T00:00:00+00:00"),
+            _record("mar-1", "2026-03-01T05:00:00+00:00"),
+        ],
+        "next_page": {"offset": "after-feb"},
+    }
+    pages_by_offset["1772323200"] = {
+        # 2026-03-01 onward
+        "data": [
+            _record("mar-1", "2026-03-01T05:00:00+00:00"),
+            _record("mar-2", "2026-03-15T00:00:00+00:00"),
+            _record("mar-3", "2026-03-28T00:00:00+00:00"),
+        ],
+        "next_page": {"offset": "after-mar"},
+    }
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        offset = request.url.params.get("offset") or ""
+        return httpx.Response(
+            200, json=pages_by_offset.get(offset, {"data": []})
+        )
+
+    async with httpx.AsyncClient(
+        transport=httpx.MockTransport(handler)
+    ) as client:
+        records = [
+            r
+            async for r in crawler.crawl_monthly(
+                client,
+                session,
+                start_year_month="2026-01",
+                end_year_month="2026-03",
+                quota_per_month=2,
+                base_url="https://example.test/api",
+            )
+        ]
+
+    # Exactly 2 records per month, in order, no cross-month bleed.
+    assert [r["id"] for r in records] == [
+        "jan-1", "jan-2",
+        "feb-1", "feb-2",
+        "mar-1", "mar-2",
+    ]
+    # Each month's sync_state row marked complete.
+    for ym in ("2026-01", "2026-02", "2026-03"):
+        state = await session.get(SyncState, f"tenders:{ym}")
+        assert state is not None
+        assert state.last_offset == "COMPLETE"

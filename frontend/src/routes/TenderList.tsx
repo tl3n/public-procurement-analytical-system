@@ -86,6 +86,7 @@ export function TenderList() {
                 <TenderTable tenders={query.data.data} />
                 <Pagination
                   page={cursorStack.length}
+                  pageSize={query.data.data.length}
                   hasPrev={cursorStack.length > 1}
                   hasNext={Boolean(query.data.next_cursor)}
                   onPrev={prevPage}

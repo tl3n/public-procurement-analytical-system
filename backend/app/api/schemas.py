@@ -173,6 +173,46 @@ class IndicatorReportResponse(BaseModel):
     indicators: list[IndicatorReportRow]
 
 
+# --- Concentration ----------------------------------------------------------
+
+
+class ConcentrationBucketOut(BaseModel):
+    cpv: str
+    hhi: float
+    gini: float
+    supplier_count: int
+    total_value: Decimal | None = None
+
+
+class ConcentrationResponse(BaseModel):
+    rows: list[ConcentrationBucketOut]
+
+
+# --- Correlation ------------------------------------------------------------
+
+
+class CorrelationResponse(BaseModel):
+    pearson: float | None
+    spearman: float | None
+    n_pairs: int
+    strength: str
+
+
+# --- Decomposition ----------------------------------------------------------
+
+
+class DecompositionPointOut(BaseModel):
+    period: datetime
+    observed: float
+    trend: float | None
+    seasonal: float | None
+    resid: float | None
+
+
+class DecompositionResponse(BaseModel):
+    points: list[DecompositionPointOut]
+
+
 # --- Admin -----------------------------------------------------------------
 
 

@@ -6,6 +6,7 @@ counting happens inside PostgreSQL — Python only shapes the output into
 dataclasses convenient for serialization downstream.
 """
 
+from collections import defaultdict
 from dataclasses import dataclass
 from datetime import datetime
 from decimal import Decimal
@@ -13,7 +14,10 @@ from decimal import Decimal
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.analytics.statistics import gini as compute_gini
+from app.analytics.statistics import hhi as compute_hhi
 from app.models import (
+    Award,
     Contract,
     Item,
     Lot,
@@ -62,6 +66,15 @@ class HighRiskShare:
     total_tenders: int
     high_risk_tenders: int
     share: float
+
+
+@dataclass
+class CpvConcentrationRow:
+    cpv: str
+    hhi: float
+    gini: float
+    supplier_count: int
+    total_value: Decimal | None
 
 
 # --- Helpers ----------------------------------------------------------------
@@ -303,3 +316,67 @@ async def high_risk_share(
         high_risk_tenders=int(high_risk),
         share=float(share),
     )
+
+
+# --- Market concentration ---------------------------------------------------
+
+
+async def market_concentration_by_cpv(
+    session: AsyncSession,
+    *,
+    since: datetime | None = None,
+    until: datetime | None = None,
+    top: int = 15,
+) -> list[CpvConcentrationRow]:
+    """HHI and Gini concentration metrics per CPV code.
+
+    For each CPV code, contract values are grouped by supplier and passed to
+    hhi() / gini() from the statistics module. Only the top N codes by total
+    contracted value are returned (minimum 2 suppliers required to compute
+    meaningful concentration).
+    """
+    stmt = (
+        select(
+            Item.cpv_code.label("cpv"),
+            Contract.supplier_id,
+            func.sum(Contract.value_amount).label("total"),
+        )
+        .join(Award, Award.id == Contract.award_id)
+        .join(Lot, Lot.id == Award.lot_id)
+        .join(Tender, Tender.id == Lot.tender_id)
+        .join(Item, Item.lot_id == Lot.id)
+        .where(Item.cpv_code.isnot(None))
+        .where(Contract.value_amount.isnot(None))
+        .where(Contract.supplier_id.isnot(None))
+        .group_by(Item.cpv_code, Contract.supplier_id)
+    )
+    if since is not None:
+        stmt = stmt.where(Contract.date_signed >= since)
+    if until is not None:
+        stmt = stmt.where(Contract.date_signed < until)
+
+    rows = (await session.execute(stmt)).all()
+
+    # Aggregate supplier totals per CPV in Python.
+    cpv_suppliers: dict[str, list[float]] = defaultdict(list)
+    for row in rows:
+        cpv_suppliers[row.cpv].append(float(row.total))
+
+    # Sort by total contracted value descending, then take top N.
+    ranked = sorted(
+        cpv_suppliers.items(),
+        key=lambda kv: sum(kv[1]),
+        reverse=True,
+    )[:top]
+
+    return [
+        CpvConcentrationRow(
+            cpv=cpv,
+            hhi=compute_hhi(values),
+            gini=compute_gini(values),
+            supplier_count=len(values),
+            total_value=Decimal(str(round(sum(values), 2))),
+        )
+        for cpv, values in ranked
+        if len(values) >= 2
+    ]

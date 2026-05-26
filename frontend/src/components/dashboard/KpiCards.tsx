@@ -69,6 +69,7 @@ export function KpiCards({ kpis, highRiskShare }: Props) {
         linkTo="/statistics"
         linkLabel="звіт по індикаторах"
         tone={riskTone}
+        barFraction={highRiskShare.share}
       />
     </div>
   );
@@ -84,20 +85,33 @@ interface CardProps {
   linkTo: string;
   linkLabel: string;
   tone?: Tone;
+  /** When supplied, renders a thin horizontal progress bar at card foot. */
+  barFraction?: number;
 }
 
-const TONE_CLASSES: Record<Tone, { icon: string; value: string }> = {
+const TONE_CLASSES: Record<
+  Tone,
+  { icon: string; value: string; surface: string; bar: string }
+> = {
   neutral: {
     icon: "bg-primary/10 text-primary",
     value: "text-foreground",
+    surface: "",
+    bar: "bg-primary",
   },
   warning: {
     icon: "bg-amber-100 text-amber-700",
     value: "text-amber-700",
+    surface:
+      "bg-gradient-to-br from-amber-50/80 via-card to-card ring-1 ring-amber-200/60",
+    bar: "bg-amber-500",
   },
   danger: {
     icon: "bg-red-100 text-red-700",
     value: "text-red-700",
+    surface:
+      "bg-gradient-to-br from-red-50/90 via-card to-card ring-1 ring-red-200/70",
+    bar: "bg-red-500",
   },
 };
 
@@ -109,27 +123,59 @@ function KpiCard({
   linkTo,
   linkLabel,
   tone = "neutral",
+  barFraction,
 }: CardProps) {
   const styles = TONE_CLASSES[tone];
+  const barPct =
+    barFraction != null
+      ? Math.min(100, Math.max(0, barFraction * 100))
+      : null;
+
   return (
-    <Card className="transition-shadow hover:shadow-md">
+    <Card
+      className={cn(
+        "relative overflow-hidden transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md",
+        styles.surface,
+      )}
+    >
       <CardHeader className="flex flex-row items-start justify-between space-y-0 pb-2">
-        <CardDescription className="text-xs uppercase tracking-wider">
+        <CardDescription className="text-[10px] uppercase tracking-[0.14em]">
           {title}
         </CardDescription>
-        <span className={cn("grid h-9 w-9 place-items-center rounded-lg", styles.icon)}>
+        <span
+          className={cn(
+            "grid h-9 w-9 place-items-center rounded-lg",
+            styles.icon,
+          )}
+        >
           <Icon className="h-4 w-4" />
         </span>
       </CardHeader>
       <CardContent className="space-y-3">
-        <CardTitle className={cn("text-3xl font-bold tracking-tight", styles.value)}>
+        <CardTitle
+          className={cn(
+            "font-mono text-3xl font-bold tracking-tight",
+            styles.value,
+          )}
+        >
           {value}
         </CardTitle>
+        {barPct != null && (
+          <div
+            className="h-1.5 w-full overflow-hidden rounded-full bg-muted"
+            aria-hidden
+          >
+            <div
+              className={cn("h-full rounded-full transition-all", styles.bar)}
+              style={{ width: `${barPct}%` }}
+            />
+          </div>
+        )}
         <div className="flex items-center justify-between border-t pt-3 text-xs text-muted-foreground">
-          <span>{description}</span>
+          <span className="truncate">{description}</span>
           <Link
             to={linkTo}
-            className="inline-flex items-center gap-1 font-medium text-primary hover:underline"
+            className="inline-flex shrink-0 items-center gap-1 font-medium text-primary hover:underline"
           >
             {linkLabel}
             <ArrowRight className="h-3 w-3" />

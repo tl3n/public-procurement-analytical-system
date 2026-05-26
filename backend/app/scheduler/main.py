@@ -26,12 +26,20 @@ log = logging.getLogger("scheduler")
 
 
 async def run_one_sync() -> None:
-    """Execute a single sync cycle and log its outcome."""
+    """Execute a single sync cycle and log its outcome.
+
+    Branches on ``settings.collection_mode`` between the historical continuous
+    walk and the stratified monthly mode.
+    """
     started = time.monotonic()
-    log.info("sync starting")
+    mode = settings.collection_mode
+    log.info("sync starting (mode=%s)", mode)
     try:
         async with create_client() as client, SessionLocal() as session:
-            result = await crawler.run_sync(client, session)
+            if mode == "monthly":
+                result = await crawler.run_sync_monthly(client, session)
+            else:
+                result = await crawler.run_sync(client, session)
         elapsed = time.monotonic() - started
         log.info(
             "sync finished: processed=%d failed=%d duration=%.1fs",
