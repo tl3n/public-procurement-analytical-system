@@ -333,6 +333,10 @@ async def persist_tender(session: AsyncSession, raw: dict) -> Tender:
         if sid is None and c.suppliers:
             fallback = await _find_or_create_supplier(session, c.suppliers[0])
             sid = fallback.id if fallback else None
+        # Prefer the explicit signing event; fall back to ``date`` which
+        # is what Prozorro v2.5 actually emits for the vast majority of
+        # contracts.
+        signed_at = c.dateSigned or c.date
         session.add(
             Contract(
                 id=c.id,
@@ -341,7 +345,7 @@ async def persist_tender(session: AsyncSession, raw: dict) -> Tender:
                 status=c.status,
                 value_amount=c.value.amount if c.value else None,
                 value_currency=c.value.currency if c.value else None,
-                date_signed=c.dateSigned,
+                date_signed=signed_at,
                 source_modified_at=c.dateModified,
                 raw_data=c_raw,
             )

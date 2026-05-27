@@ -101,6 +101,10 @@ class ContractIn(_Permissive):
     id: str
     awardID: str | None = None
     status: str | None = None
+    # Prozorro v2.5 ships the contract date in ``date``; ``dateSigned`` is
+    # only set when an explicit signing event was recorded. Keep both and
+    # prefer ``dateSigned`` when present (it's the more specific signal).
+    date: datetime | None = None
     dateSigned: datetime | None = None
     dateModified: datetime | None = None
     value: ValueIn | None = None
