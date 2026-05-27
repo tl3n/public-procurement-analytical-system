@@ -1,11 +1,12 @@
 """Dashboard endpoint — KPIs + type distribution + top-risk tenders."""
 
 from fastapi import APIRouter, Depends
-from sqlalchemy import case, func, select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.analytics import aggregations
+from app.analytics.indicators.composite import CRI_CODE
 from app.api._helpers import tender_to_summary
 from app.api.schemas import (
     DashboardKpis,
@@ -20,8 +21,9 @@ from app.models import RiskIndicatorValue, Tender
 
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
 
-# v2: added monthly volume_over_time series for the dashboard chart.
-_CACHE_KEY = "dashboard:v2"
+# v3: top-risk ranking and high-risk share now use the composite CRI row
+# instead of OR'ing across every boolean indicator.
+_CACHE_KEY = "dashboard:v3"
 
 
 @router.get("", response_model=DashboardResponse)
@@ -81,19 +83,20 @@ async def get_dashboard(
         share=high_risk.share,
     )
 
-    # Top-risk tenders: most boolean indicators flagged True, then most recent.
-    risk_count = func.count(
-        case((RiskIndicatorValue.value_boolean.is_(True), 1))
-    ).label("rc")
+    # Top-risk tenders: highest CRI score among tenders flagged high-risk,
+    # with date_published as a deterministic tie-breaker.
     stmt = (
-        select(Tender, risk_count)
+        select(Tender)
         .options(selectinload(Tender.procuring_entity))
-        .outerjoin(
+        .join(
             RiskIndicatorValue, RiskIndicatorValue.tender_id == Tender.id
         )
-        .group_by(Tender.id)
-        .having(risk_count > 0)
-        .order_by(risk_count.desc(), Tender.date_published.desc().nullslast())
+        .where(RiskIndicatorValue.indicator_code == CRI_CODE)
+        .where(RiskIndicatorValue.value_boolean.is_(True))
+        .order_by(
+            RiskIndicatorValue.value_numeric.desc().nullslast(),
+            Tender.date_published.desc().nullslast(),
+        )
         .limit(10)
     )
     rows = (await session.execute(stmt)).all()

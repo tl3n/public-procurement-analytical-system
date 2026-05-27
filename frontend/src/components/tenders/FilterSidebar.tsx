@@ -51,6 +51,8 @@ const BOOLEAN_INDICATORS = Object.values(INDICATOR_METADATA).filter(
   (m) => m.valueType === "boolean",
 );
 
+const CRI_CODE = "risk.composite_cri";
+
 interface Props {
   values: Filters;
   onApply: (filters: Filters) => void;
@@ -173,6 +175,20 @@ export function FilterSidebar({ values, onApply, onReset }: Props) {
           <p className="text-[11px] text-muted-foreground">
             Декілька варіантів — AND (тендер має задовольняти всі обрані).
           </p>
+          <label className="flex cursor-pointer items-start gap-2 rounded-md border border-amber-200/70 bg-amber-50/50 p-2 text-sm">
+            <input
+              type="checkbox"
+              checked={(values.indicator_true ?? []).includes(CRI_CODE)}
+              onChange={() => toggleIndicator(CRI_CODE)}
+              className="mt-0.5"
+            />
+            <span className="flex flex-col gap-0.5">
+              <span className="font-medium">Високий ризик за CRI</span>
+              <span className="text-[11px] text-muted-foreground">
+                Композитний індекс ≥ 0.4
+              </span>
+            </span>
+          </label>
           {BOOLEAN_INDICATORS.map((ind) => {
             const checked = (values.indicator_true ?? []).includes(ind.code);
             return (

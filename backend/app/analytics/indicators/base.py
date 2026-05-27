@@ -155,6 +155,10 @@ async def compute_for_tender(
     Idempotent: any previous ``risk_indicator_values`` rows for this tender
     are deleted before the new ones are inserted.
     """
+    # Function-local import to avoid a circular dependency: composite.py
+    # imports IndicatorDescription/IndicatorResult from this module.
+    from app.analytics.indicators.composite import compute_composite_cri
+
     tender = await _load_tender(session, tender_id)
     if tender is None:
         return []
@@ -170,6 +174,7 @@ async def compute_for_tender(
     )
 
     persisted: list[RiskIndicatorValue] = []
+    outcomes: list[IndicatorResult] = []
     now = datetime.now(tz=UTC)
     for indicator in registry.enabled():
         code = indicator.describe().code
@@ -179,6 +184,7 @@ async def compute_for_tender(
             # One faulty indicator must not block the others.
             log.exception("indicator %s failed for tender %s", code, tender_id)
             continue
+        outcomes.append(outcome)
         row = RiskIndicatorValue(
             tender_id=tender_id,
             indicator_code=outcome.code,
@@ -188,6 +194,22 @@ async def compute_for_tender(
         )
         session.add(row)
         persisted.append(row)
+
+    # Composite CRI is derived from the in-memory outcomes — no extra DB
+    # work. ``None`` means none of the weighted indicators had a usable
+    # value (e.g. brand-new tender), in which case we skip persistence and
+    # match the "tried, cannot compute" convention of base indicators.
+    composite = compute_composite_cri(outcomes)
+    if composite is not None:
+        cri_row = RiskIndicatorValue(
+            tender_id=tender_id,
+            indicator_code=composite.code,
+            value_boolean=composite.value_boolean,
+            value_numeric=composite.value_numeric,
+            computed_at=now,
+        )
+        session.add(cri_row)
+        persisted.append(cri_row)
 
     await session.flush()
     return persisted

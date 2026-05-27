@@ -10,6 +10,13 @@ export interface IndicatorMeta {
 }
 
 export const INDICATOR_METADATA: Record<string, IndicatorMeta> = {
+  "risk.composite_cri": {
+    code: "risk.composite_cri",
+    name: "Композитний індекс корупційного ризику (CRI)",
+    interpretation:
+      "Зважена сума нормалізованих значень п’яти базових індикаторів у діапазоні 0…1. NULL — менше двох вимірюваних індикаторів. Тендер позначається як високоризиковий, коли CRI ≥ 0.4. Ваги: single_bidding 0.25, non_competitive 0.20, shortened_period 0.15, buyer_concentration 0.20, price_deviation 0.20.",
+    valueType: "numeric",
+  },
   "risk.single_bidding": {
     code: "risk.single_bidding",
     name: "Одиночне подання",

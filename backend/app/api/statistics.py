@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.analytics import aggregations
 from app.analytics.indicators import registry
+from app.analytics.indicators.composite import CRI_DESCRIPTION
 from app.analytics.statistics import (
     decompose_time_series,
     pearson_correlation,
@@ -140,7 +141,8 @@ async def get_indicator_report(
     cache: Cache = Depends(get_cache),
 ):
     """Per-indicator counts of True / False / NULL outcomes."""
-    key = "indicators:v1"
+    # v2: includes the composite CRI row alongside the five base indicators.
+    key = "indicators:v2"
     cached = await cache.get_json(key)
     if cached is not None:
         return cached
@@ -173,9 +175,13 @@ async def get_indicator_report(
     counts = {r.code: r for r in rows}
 
     # Compose the response in registry order so the UI gets a stable shape.
+    # The composite CRI is appended at the end so the base indicators come
+    # first and the synthetic summary closes the report.
+    descriptions = [ind.describe() for ind in registry.enabled()]
+    descriptions.append(CRI_DESCRIPTION)
+
     indicators: list[IndicatorReportRow] = []
-    for ind in registry.enabled():
-        desc = ind.describe()
+    for desc in descriptions:
         r = counts.get(desc.code)
         indicators.append(
             IndicatorReportRow(

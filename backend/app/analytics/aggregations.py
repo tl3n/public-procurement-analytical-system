@@ -291,7 +291,16 @@ async def high_risk_share(
     since: datetime | None = None,
     until: datetime | None = None,
 ) -> HighRiskShare:
-    """Fraction of tenders that scored True on at least one boolean indicator."""
+    """Fraction of tenders flagged high-risk by the composite CRI.
+
+    A tender counts as high-risk when its persisted CRI row has
+    ``value_boolean=True`` — i.e. its weighted score met the configured
+    threshold. Earlier versions OR'd across every boolean indicator; the
+    CRI replaces that with a single calibrated cutoff.
+    """
+    # Local import to keep composite as the source of truth for the code.
+    from app.analytics.indicators.composite import CRI_CODE
+
     scope = select(Tender.id)
     scope = _apply_window(scope, Tender.date_published, since=since, until=until)
     scope_subq = scope.subquery()
@@ -303,6 +312,7 @@ async def high_risk_share(
     high_risk = (
         await session.execute(
             select(func.count(func.distinct(RiskIndicatorValue.tender_id)))
+            .where(RiskIndicatorValue.indicator_code == CRI_CODE)
             .where(RiskIndicatorValue.value_boolean.is_(True))
             .where(
                 RiskIndicatorValue.tender_id.in_(select(scope_subq.c.id))
