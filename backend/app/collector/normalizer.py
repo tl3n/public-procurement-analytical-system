@@ -299,18 +299,24 @@ async def persist_tender(session: AsyncSession, raw: dict) -> Tender:
     await session.flush()
 
     # --- Awards.
+    # Track each award's supplier so the contract pass can inherit it —
+    # Prozorro's contract payload does not include a suppliers field,
+    # the canonical source is the parent award.
+    award_supplier_id: dict[str, str | None] = {}
     for a in t.awards:
         supplier = (
             await _find_or_create_supplier(session, a.suppliers[0])
             if a.suppliers
             else None
         )
+        sid = supplier.id if supplier else None
+        award_supplier_id[a.id] = sid
         session.add(
             Award(
                 id=a.id,
                 lot_id=lot_for(a.lotID),
                 bid_id=a.bid_id,
-                supplier_id=supplier.id if supplier else None,
+                supplier_id=sid,
                 status=a.status,
                 value_amount=a.value.amount if a.value else None,
                 value_currency=a.value.currency if a.value else None,
@@ -321,16 +327,17 @@ async def persist_tender(session: AsyncSession, raw: dict) -> Tender:
 
     # --- Contracts.
     for c, c_raw in zip(t.contracts, raw.get("contracts") or [], strict=False):
-        supplier = (
-            await _find_or_create_supplier(session, c.suppliers[0])
-            if c.suppliers
-            else None
-        )
+        # Inherit the supplier from the parent award; fall back to a
+        # supplier in the contract payload if Prozorro ever populates one.
+        sid = award_supplier_id.get(c.awardID) if c.awardID else None
+        if sid is None and c.suppliers:
+            fallback = await _find_or_create_supplier(session, c.suppliers[0])
+            sid = fallback.id if fallback else None
         session.add(
             Contract(
                 id=c.id,
                 award_id=c.awardID,
-                supplier_id=supplier.id if supplier else None,
+                supplier_id=sid,
                 status=c.status,
                 value_amount=c.value.amount if c.value else None,
                 value_currency=c.value.currency if c.value else None,

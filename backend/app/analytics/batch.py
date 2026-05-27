@@ -19,7 +19,7 @@ entire run in one giant transaction.
 """
 
 import logging
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from decimal import Decimal
 
 import pandas as pd
@@ -38,10 +38,14 @@ from app.models import Award, Contract, Item, Lot, RiskIndicatorValue, Tender
 
 log = logging.getLogger(__name__)
 
-# Indicators whose code we route through the bulk-pandas path.
-BULK_INDICATOR_CODES: frozenset[str] = frozenset(
-    {"risk.buyer_concentration", "risk.price_deviation"}
-)
+# Indicators whose code we route through the bulk-pandas path. Currently
+# empty: both context-dependent indicators flow through the per-tender
+# dispatcher so the composite CRI can see all five base signals when it
+# combines them (the bulk path persists rows after Pass 1's CRI has
+# already been written, which would leave the composite blind to the two
+# bulk indicators). The pandas implementations below are kept for future
+# reactivation if the per-tender cost ever becomes a bottleneck.
+BULK_INDICATOR_CODES: frozenset[str] = frozenset()
 
 
 async def recompute_all(
@@ -173,7 +177,11 @@ async def _all_tender_ids(session: AsyncSession) -> list[str]:
 async def _bulk_buyer_concentration(
     session: AsyncSession, indicator: BuyerConcentrationIndicator
 ) -> dict[str, Decimal | None]:
-    """Largest supplier share of each buyer's contract spend in the window."""
+    """Largest supplier share of each buyer's contract spend in the loaded
+    period (i.e. across all contracts of the buyer signed via tenders
+    published at or before the current tender). Mirrors the per-tender
+    indicator's semantics — see ``buyer_concentration.compute``."""
+    del indicator  # kept for signature compatibility with the registry
     tender_rows = (
         await session.execute(
             select(
@@ -189,19 +197,22 @@ async def _bulk_buyer_concentration(
         tender_rows, columns=["id", "buyer_id", "date_published"]
     )
 
+    # Use the parent tender's date_published as the temporal anchor —
+    # Contract.date_signed is unreliable in the Prozorro export and would
+    # filter out most of the contracted spend.
     contract_rows = (
         await session.execute(
             select(
                 Contract.supplier_id,
                 Contract.value_amount,
-                Contract.date_signed,
+                Tender.date_published.label("anchor_date"),
                 Tender.procuring_entity_id.label("buyer_id"),
             )
             .join(Award, Award.id == Contract.award_id)
             .join(Lot, Lot.id == Award.lot_id)
             .join(Tender, Tender.id == Lot.tender_id)
             .where(Contract.value_amount.isnot(None))
-            .where(Contract.date_signed.isnot(None))
+            .where(Tender.date_published.isnot(None))
         )
     ).all()
 
@@ -211,25 +222,24 @@ async def _bulk_buyer_concentration(
 
     contracts_df = pd.DataFrame(
         contract_rows,
-        columns=["supplier_id", "value", "date_signed", "buyer_id"],
+        columns=["supplier_id", "value", "anchor_date", "buyer_id"],
     )
     contracts_df["value"] = contracts_df["value"].astype(float)
-    contracts_df["date_signed"] = pd.to_datetime(
-        contracts_df["date_signed"], utc=True
+    contracts_df["anchor_date"] = pd.to_datetime(
+        contracts_df["anchor_date"], utc=True
     )
     tenders_df["date_published"] = pd.to_datetime(
         tenders_df["date_published"], utc=True
     )
-    window = timedelta(days=indicator.window_days)
 
     for tender in tenders_df.itertuples(index=False):
         if pd.isna(tender.buyer_id) or pd.isna(tender.date_published):
             continue
-        window_start = tender.date_published - window
+        # No fixed lookback — every contract of this buyer up to and
+        # including the current tender's publication date contributes.
         mask = (
             (contracts_df["buyer_id"] == tender.buyer_id)
-            & (contracts_df["date_signed"] >= window_start)
-            & (contracts_df["date_signed"] <= tender.date_published)
+            & (contracts_df["anchor_date"] <= tender.date_published)
         )
         subset = contracts_df.loc[mask, ["supplier_id", "value"]]
         if subset.empty:
@@ -246,7 +256,10 @@ async def _bulk_buyer_concentration(
 async def _bulk_price_deviation(
     session: AsyncSession, indicator: PriceDeviationIndicator
 ) -> dict[str, Decimal | None]:
-    """Relative deviation of a tender's expected value from its CPV-group median."""
+    """Relative deviation of a tender's expected value from its CPV-group
+    median across the loaded data period (strictly before its publication
+    date). Mirrors ``price_deviation.compute`` — see that module for the
+    motivation behind dropping a fixed lookback window."""
     all_ids = await _all_tender_ids(session)
     results: dict[str, Decimal | None] = {tid: None for tid in all_ids}
 
@@ -271,16 +284,15 @@ async def _bulk_price_deviation(
     df = df.drop_duplicates(subset=["id"], keep="first").reset_index(drop=True)
     df["value"] = pd.to_numeric(df["value"], errors="coerce").astype(float)
     df["date_published"] = pd.to_datetime(df["date_published"], utc=True)
-    window = timedelta(days=indicator.window_days)
     min_ref = indicator.min_reference_size
 
     for tender in df.itertuples(index=False):
         if pd.isna(tender.value) or pd.isna(tender.date_published):
             continue
-        window_start = tender.date_published - window
+        # No fixed lookback — the reference set is every comparable tender
+        # published before this one.
         mask = (
             (df["cpv"] == tender.cpv)
-            & (df["date_published"] >= window_start)
             & (df["date_published"] < tender.date_published)
             & (df["id"] != tender.id)
             & (df["value"].notna())

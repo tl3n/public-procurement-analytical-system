@@ -1,15 +1,22 @@
 """Price deviation indicator.
 
 Numeric: signed relative deviation of a tender's expected value from the
-median expected value of comparable tenders (same CPV, prior 12 months).
-Positive values flag overstatement; negative values flag understatement that
-may be designed to slip under a procurement threshold.
+median expected value of comparable tenders (same CPV) across the loaded
+data period. Positive values flag overstatement; negative values flag
+understatement that may be designed to slip under a procurement
+threshold.
 
 Boolean: True when the tender's price is a statistical outlier in the
-reference distribution (Tukey's 1.5×IQR rule applied to comparable values).
+reference distribution (Tukey's 1.5×IQR rule applied to comparable
+values).
+
+The reference window is every comparable tender published *before* this
+one. A fixed 12-month lookback would yield no signal here — the deployed
+Prozorro feed starts at 2026-01, so the first months would have zero
+comparable history. No-look-ahead is preserved by capping at
+``tender.date_published``.
 """
 
-from datetime import timedelta
 from decimal import Decimal
 
 from sqlalchemy import func, select
@@ -25,9 +32,8 @@ from app.models import Item, Lot, Tender
 
 
 class PriceDeviationIndicator(Indicator):
-    window_days: int = 365
-    # Below this many comparable tenders the median is statistically unreliable
-    # and the indicator returns NULL.
+    # Below this many comparable tenders the median is statistically
+    # unreliable and the indicator returns NULL.
     min_reference_size: int = 30
 
     def describe(self) -> IndicatorDescription:
@@ -37,8 +43,9 @@ class PriceDeviationIndicator(Indicator):
             value_type="numeric",
             interpretation=(
                 "Signed relative deviation of the tender's expected value from "
-                "the median expected value of tenders with the same CPV in the "
-                "previous 12 months. Boolean True when the price is a "
+                "the median expected value of tenders with the same CPV across "
+                "the loaded data period (strictly before this tender's "
+                "publication date). Boolean True when the price is a "
                 "statistical outlier (Tukey 1.5×IQR). NULL when fewer than "
                 "30 comparable tenders exist."
             ),
@@ -61,7 +68,6 @@ class PriceDeviationIndicator(Indicator):
         cpv = self._primary_cpv(tender)
         if cpv is None:
             return IndicatorResult(code)
-        window_start = tender.date_published - timedelta(days=self.window_days)
 
         # Subquery: distinct comparable tenders (one row each, no fan-out from
         # items). Joining straight to items would multiply tenders with N
@@ -73,13 +79,15 @@ class PriceDeviationIndicator(Indicator):
             .distinct()
             .subquery()
         )
+        # Every comparable tender published before this one — the reference
+        # set scales with whatever has been loaded so far rather than a
+        # fixed 12-month window.
         tenders_in_window = (
             select(Tender.id, Tender.value_amount)
             .where(Tender.id.in_(select(comparable_ids.c.tender_id)))
             .where(Tender.id != tender.id)
             .where(Tender.value_amount.isnot(None))
             .where(Tender.date_published.isnot(None))
-            .where(Tender.date_published >= window_start)
             .where(Tender.date_published < tender.date_published)
             .subquery()
         )

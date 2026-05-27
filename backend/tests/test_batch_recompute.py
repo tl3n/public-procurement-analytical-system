@@ -103,7 +103,9 @@ async def test_batch_recompute_populates_every_indicator_for_every_tender(
     session,
 ):
     tender_ids = await _seed_three_tenders(session)
-    expected_indicators = len(global_registry.enabled())  # 5
+    # Five base indicators plus the composite CRI that the dispatcher
+    # derives from their outcomes — six rows per tender total.
+    expected_indicators = len(global_registry.enabled()) + 1  # 5 + CRI
 
     summary = await recompute_all(session)
     assert summary["tenders_processed"] == len(tender_ids)
